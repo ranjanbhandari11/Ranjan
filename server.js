@@ -926,6 +926,64 @@ async function deleteUserByEmail(email) {
   await writeFileUsers(nextUsers);
 }
 
+function createDeletionArchiveUser(deletionRecord) {
+  const deletedAt = deletionRecord.deleted_at || new Date().toISOString();
+  const emailSlug = normalizeTerm(deletionRecord.email)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "account";
+  const archiveId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString("hex");
+
+  return createDefaultUser({
+    username: `Deleted Account ${deletedAt.slice(0, 10)} ${archiveId.slice(0, 8)}`,
+    email: `deleted-${Date.now()}-${emailSlug}@deleted.pantrypal.local`,
+    password: `deleted-${archiveId}`,
+    favorites: [],
+    accountStatus: "deleted",
+    deletedAt,
+    subscription: {
+      plan: "Free Plan",
+      status: "inactive"
+    },
+    savedRecipes: [],
+    recommendationPlan: [],
+    shoppingList: {
+      items: [],
+      weeklyDays: []
+    },
+    authNotifications: {
+      lastGoogleLoginEmailSentAt: "",
+      lastSignupEmailSentAt: "",
+      lastPasswordResetNoticeSentAt: "",
+      deletionReason: deletionRecord.reason,
+      deletedEmail: deletionRecord.email,
+      deletedUsername: deletionRecord.username,
+      deletedAt,
+      deletionSource: deletionRecord.source,
+      deletionUserAgent: deletionRecord.user_agent
+    },
+    passwordResetToken: "",
+    passwordResetExpiresAt: null
+  });
+}
+
+async function recordDeletionInUsersArchive(deletionRecord) {
+  if (storageMode !== "supabase") {
+    return null;
+  }
+
+  const archiveUser = sanitizeUser(createDeletionArchiveUser(deletionRecord));
+  const { error } = await supabase
+    .from(SUPABASE_USERS_TABLE)
+    .insert(buildSupabasePayload(archiveUser));
+
+  if (error) {
+    throw error;
+  }
+
+  return archiveUser;
+}
+
 async function recordAccountDeletion(user, reason, req) {
   const deletionRecord = {
     email: normalizeTerm(user.email),
@@ -950,7 +1008,16 @@ async function recordAccountDeletion(user, reason, req) {
       if (!isSupabaseSchemaMismatch(error)) {
         throw error;
       }
-      console.warn("Account deletion reason table unavailable, saving reason to local file:", error?.message || error);
+      console.warn("Account deletion reason table unavailable, archiving reason in users table:", error?.message || error);
+      try {
+        await recordDeletionInUsersArchive(deletionRecord);
+        return {
+          ...deletionRecord,
+          archived_in: SUPABASE_USERS_TABLE
+        };
+      } catch (archiveError) {
+        console.warn("Users-table deletion archive failed, saving reason to local file:", archiveError?.message || archiveError);
+      }
     }
   }
 
