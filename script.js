@@ -705,15 +705,20 @@ function getRecipeImageUrl(recipe) {
   if (recipe?.imageUrl) {
     return String(recipe.imageUrl);
   }
+  if (recipe?.image && !String(recipe.image).startsWith("thumb-")) {
+    return String(recipe.image);
+  }
   const override = recipeImageOverrides[String(recipe?.id || "").toLowerCase()]
     || recipeImageOverrides[String(recipe?.title || "").toLowerCase()];
   if (override) {
     return override;
   }
-  if (recipe?.image && !String(recipe.image).startsWith("thumb-")) {
-    return String(recipe.image);
+  if (recipe?.image && String(recipe.image).startsWith("thumb-") && thumbImageUrls[recipe.image]) {
+    return thumbImageUrls[recipe.image];
   }
-  return thumbImageUrls[getThumbClass(recipe)] || thumbImageUrls["thumb-green"];
+  const fallbackClasses = Object.keys(thumbImageUrls);
+  const seed = hashRecipeText(`${recipe?.id || ""}|${recipe?.title || ""}|${recipe?.category || ""}`);
+  return thumbImageUrls[fallbackClasses[seed % fallbackClasses.length]] || thumbImageUrls["thumb-green"];
 }
 
 function getThumbStyle(recipe) {

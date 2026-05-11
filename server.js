@@ -35,6 +35,7 @@ const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const EMAIL_FROM = process.env.EMAIL_FROM || SMTP_USER || "";
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const RESEND_FROM = process.env.RESEND_FROM || "PantryPal <onboarding@resend.dev>";
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const ACCOUNT_DELETIONS_FILE = path.join(DATA_DIR, "account-deletions.json");
@@ -323,6 +324,34 @@ async function sendEmailDetailed({ to, subject, text, html }) {
     return { sent: false, provider: null, reason: "missing-recipient-or-from-address", attempts };
   }
 
+  if (RESEND_API_KEY) {
+    try {
+      const response = await withTimeout(
+        () => fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ from: RESEND_FROM, to, subject, text, html })
+        }),
+        EXTERNAL_REQUEST_TIMEOUT_MS,
+        "Resend email delivery"
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || `Resend returned ${response.status}`);
+      }
+      return { sent: true, provider: "resend", messageId: payload?.id || "", attempts };
+    } catch (error) {
+      const reason = publicEmailError(error, "resend");
+      attempts.push({ provider: "resend", reason });
+      console.error("PantryPal Resend delivery failed:", reason);
+    }
+  } else {
+    attempts.push({ provider: "resend", reason: "resend-not-configured" });
+  }
+
   if (mailer) {
     try {
       const info = await sendMailWithTimeout(mailer, { from: EMAIL_FROM, to, subject, text, html });
@@ -378,34 +407,6 @@ async function sendEmailDetailed({ to, subject, text, html }) {
         console.error(`PantryPal ${fallback.provider} delivery failed:`, reason);
       }
     }
-  }
-
-  if (RESEND_API_KEY) {
-    try {
-      const response = await withTimeout(
-        () => fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ from: EMAIL_FROM, to, subject, text, html })
-        }),
-        EXTERNAL_REQUEST_TIMEOUT_MS,
-        "Resend email delivery"
-      );
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || `Resend returned ${response.status}`);
-      }
-      return { sent: true, provider: "resend", messageId: payload?.id || "", attempts };
-    } catch (error) {
-      const reason = publicEmailError(error, "resend");
-      attempts.push({ provider: "resend", reason });
-      console.error("PantryPal Resend delivery failed:", reason);
-    }
-  } else {
-    attempts.push({ provider: "resend", reason: "resend-not-configured" });
   }
 
   return {
@@ -1187,10 +1188,11 @@ app.get("/api/email/status", (_req, res) => {
     smtpConfigured: Boolean(mailer && EMAIL_FROM),
     gmailFallbackConfigured: Boolean(normalizeTerm(SMTP_HOST) === "smtp.gmail.com" && SMTP_USER && SMTP_PASS),
     resendConfigured: Boolean(RESEND_API_KEY && EMAIL_FROM),
+    resendFromConfigured: Boolean(RESEND_FROM),
     firebaseResetConfigured: Boolean(FIREBASE_PUBLIC_CONFIG.apiKey),
     fromConfigured: Boolean(EMAIL_FROM),
-    deliveryPriority: ["smtp", "gmail-fallback", "resend", "firebase"],
-    note: "If all configured values are true but no email arrives, check Gmail App Password, spam folder, Firebase Email/Password provider, and Render outbound mail limits."
+    deliveryPriority: ["resend", "smtp", "gmail-fallback", "firebase"],
+    note: "PantryPal sends through Resend first. If no email arrives, verify the Resend sender/domain, recipient restrictions, spam folder, and Render outbound mail limits."
   });
 });
 
