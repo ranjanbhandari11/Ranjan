@@ -1,0 +1,21 @@
+{
+  "name": "pantrypal-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PantryPal demo app with Supabase-backed account data",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10"
+  },
+  "main": "server.js",
+  "scripts": {
+    "start": "node render-hotfix.js && node server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "nodemailer": "^8.0.5",
+    "stripe": "^22.0.2"
+  }
+}

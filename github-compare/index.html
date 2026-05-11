@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PantryPal | Smart Pantry Planning</title>
+  <meta
+    name="description"
+    content="PantryPal demo website with recipe recommendations, ingredient matching, recipe detail, and subscription screens."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <link rel="stylesheet" href="styles.css?v=20260505professional">
+</head>
+<body>
+  <div class="page-bg"></div>
+  <div class="app-toast" id="app-toast" aria-live="polite"></div>
+  <div class="environment-banner is-hidden" id="environment-banner" aria-live="polite"></div>
+
+  <main class="app-shell">
+    <section class="screen-stack">
+      <article class="screen is-active" id="welcome">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout landing-layout welcome-layout-clean">
+            <section class="welcome-editorial welcome-editorial-clean">
+              <div class="app-brand app-brand-nav welcome-brand">
+                <span class="brand-dot"></span>
+                <span class="brand-name">PantryPal</span>
+              </div>
+              <span class="hero-kicker">Smart pantry planning</span>
+              <h1>Welcome to PantryPal.</h1>
+              <p class="welcome-lead">
+                Log in, sign up, continue with Google, continue as a guest, or reset your password from one clean starting page.
+              </p>
+              <div class="welcome-visual-panel">
+                <div class="welcome-visual-image"></div>
+                <div class="welcome-visual-copy">
+                  <strong>Your account opens the full PantryPal website</strong>
+                  <span>Recipe search, weekly planning, profile, shopping list, and subscription tools appear after you continue.</span>
+                </div>
+              </div>
+            </section>
+            <div class="auth-panel landing-auth-panel">
+              <div class="welcome-hero-copy compact">
+                <span class="hero-kicker">Account access</span>
+                <p>Choose how you want to continue.</p>
+              </div>
+              <h2>Welcome to <span>PantryPal</span></h2>
+              <div class="welcome-slideshow" aria-hidden="true">
+                <div class="welcome-slide is-active" data-slide="0"></div>
+                <div class="welcome-slide" data-slide="1"></div>
+                <div class="welcome-slide" data-slide="2"></div>
+              </div>
+              <button class="primary-button wide" type="button" data-auth-action="google">Continue with Google</button>
+              <button class="guest-button wide" type="button" data-auth-action="guest">Continue as Guest</button>
+              <div class="divider"><span>Use your PantryPal account</span></div>
+              <form class="auth-form" id="login-form">
+                <label>
+                  Email or Username
+                  <input id="user-id" type="text" placeholder="Enter your email or username">
+                </label>
+                <label>
+                  Password
+                  <input id="user-password" type="password" placeholder="Enter your password">
+                </label>
+                <div class="auth-actions">
+                  <button type="submit" class="primary-button">Login</button>
+                  <button type="button" class="secondary-button" data-auth-action="signin">Sign Up</button>
+                </div>
+                <button type="button" class="text-button" id="forgot-password-button">Forgot password?</button>
+              </form>
+              <p class="auth-helper-text auth-helper-compact">After continuing, PantryPal opens a proper overview page before recipe recommendations or account tools.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="guest-setup">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout guest-setup-layout">
+            <div class="app-brand app-brand-corner">
+              <span class="brand-dot"></span>
+              <span class="brand-name">PantryPal</span>
+            </div>
+            <div class="welcome-shelf left"></div>
+            <div class="auth-panel guest-setup-panel">
+              <div class="welcome-hero-copy">
+                <span class="hero-kicker">Start a guest session</span>
+                <p>Tell PantryPal your guest name and a few favourite ingredients so we can shape your first recommendations before you enter the app.</p>
+              </div>
+              <h2>Set up your <span>guest session</span></h2>
+              <form class="auth-form" id="guest-form">
+                <label>
+                  Guest Name
+                  <input id="guest-name" type="text" placeholder="Enter your guest name">
+                </label>
+                <label>
+                  Favourite Ingredients
+                  <input id="guest-favorites" type="text" placeholder="Rice, Tomato, Chicken">
+                </label>
+                <p class="auth-helper-text">Use commas between ingredients. These will shape your personalised guest recommendations for this session only.</p>
+                <div class="auth-actions auth-actions-stack">
+                  <button type="submit" class="primary-button">Start Guest Session</button>
+                  <button type="button" class="secondary-button" data-screen-target="welcome">Back to Login</button>
+                </div>
+              </form>
+            </div>
+            <div class="welcome-shelf right"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="forgot-password">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout forgot-layout">
+            <div class="app-brand app-brand-corner">
+              <span class="brand-dot"></span>
+              <span class="brand-name">PantryPal</span>
+            </div>
+            <div class="welcome-shelf left"></div>
+            <div class="auth-panel forgot-panel">
+              <div class="welcome-hero-copy">
+                <span class="hero-kicker">Reset your password</span>
+                <p>Enter your PantryPal username or account email. If we find a matching account, PantryPal will send a real password reset email to the account email address.</p>
+              </div>
+              <h2>Forgot your <span>password?</span></h2>
+              <form class="auth-form" id="forgot-password-form">
+                <label>
+                  Username or Email
+                  <input id="forgot-identity" type="text" placeholder="Enter your username or email">
+                </label>
+                <p class="auth-helper-text" id="forgot-password-note">PantryPal will email a secure reset link to the address linked to your account.</p>
+                <div class="auth-actions auth-actions-stack">
+                  <button type="submit" class="primary-button">Send Reset Email</button>
+                  <button type="button" class="secondary-button" data-screen-target="welcome">Back to Login</button>
+                </div>
+              </form>
+            </div>
+            <div class="welcome-shelf right"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="reset-password-screen">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout forgot-layout">
+            <div class="app-brand app-brand-corner">
+              <span class="brand-dot"></span>
+              <span class="brand-name">PantryPal</span>
+            </div>
+            <div class="welcome-shelf left"></div>
+            <div class="auth-panel forgot-panel">
+              <div class="welcome-hero-copy">
+                <span class="hero-kicker">Choose a new password</span>
+                <p>Enter a new PantryPal password for your account. This secure reset link expires automatically.</p>
+              </div>
+              <h2>Set your <span>new password</span></h2>
+              <form class="auth-form" id="reset-password-form">
+                <input id="reset-token" type="hidden">
+                <label>
+                  New Password
+                  <input id="reset-password" type="password" placeholder="Enter your new password">
+                </label>
+                <label>
+                  Confirm New Password
+                  <input id="reset-password-confirm" type="password" placeholder="Confirm your new password">
+                </label>
+                <p class="auth-helper-text" id="reset-password-note">Use at least 6 characters. After resetting, you can sign back in immediately.</p>
+                <div class="auth-actions auth-actions-stack">
+                  <button type="submit" class="primary-button">Update Password</button>
+                  <button type="button" class="secondary-button" data-screen-target="welcome">Back to Login</button>
+                </div>
+              </form>
+            </div>
+            <div class="welcome-shelf right"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="google-auth">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout google-auth-layout">
+            <div class="app-brand app-brand-corner">
+              <span class="brand-dot"></span>
+              <span class="brand-name">PantryPal</span>
+            </div>
+            <div class="welcome-shelf left"></div>
+            <div class="auth-panel google-auth-panel">
+              <div class="welcome-hero-copy">
+                <span class="hero-kicker">Local development Google fallback</span>
+                <p>Localhost is using a safe fallback screen. For real Google authentication, use the hosted PantryPal site. This local screen lets you continue development without a broken auth button.</p>
+              </div>
+              <h2>Continue with <span>Google</span></h2>
+              <div class="google-account-list">
+                <button class="google-account-card" type="button" data-google-email="ranjanbhandari11@gmail.com">
+                  <div>
+                    <strong>Ranjan Bhandari</strong>
+                    <span>ranjanbhandari11@gmail.com</span>
+                  </div>
+                  <small>Personal PantryPal account</small>
+                </button>
+                <button class="google-account-card" type="button" data-google-email="ramandeep7.7.2003@gmail.com">
+                  <div>
+                    <strong>Ramandeep Kaur</strong>
+                    <span>ramandeep7.7.2003@gmail.com</span>
+                  </div>
+                  <small>Personal PantryPal account</small>
+                </button>
+                <button class="google-account-card" type="button" data-google-email="manishkc9803@gmail.com">
+                  <div>
+                    <strong>Manish KC Khatri</strong>
+                    <span>manishkc9803@gmail.com</span>
+                  </div>
+                  <small>Personal PantryPal account</small>
+                </button>
+                <button class="google-account-card google-account-card-demo" type="button" data-google-email="alex.google@pantrypal.demo" data-google-demo="true">
+                  <div>
+                    <strong>Alex Google</strong>
+                    <span>alex.google@pantrypal.demo</span>
+                  </div>
+                  <small>Demo Google profile</small>
+                </button>
+              </div>
+              <div class="auth-actions auth-actions-stack">
+                <button type="button" class="secondary-button" data-screen-target="welcome">Back to Login</button>
+              </div>
+            </div>
+            <div class="welcome-shelf right"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="signup">
+        <div class="browser-frame">
+          <div class="screen-content welcome-layout">
+            <div class="app-brand app-brand-corner">
+              <span class="brand-dot"></span>
+              <span class="brand-name">PantryPal</span>
+            </div>
+            <div class="welcome-shelf left"></div>
+            <div class="auth-panel">
+              <div class="welcome-hero-copy">
+                <span class="hero-kicker">Create your account</span>
+                <p>Set up a PantryPal profile to save favourite recipes, keep favourite ingredients, and generate a more personal 7-day meal plan.</p>
+              </div>
+              <h2>Sign up for <span>PantryPal</span></h2>
+              <form class="auth-form" id="signup-form">
+                <label>
+                  Username
+                  <input id="signup-username" type="text" placeholder="Choose a username">
+                </label>
+                <label>
+                  Email
+                  <input id="signup-email" type="email" placeholder="Enter your email address">
+                </label>
+                <label>
+                  Password
+                  <input id="signup-password" type="password" placeholder="Create a password">
+                </label>
+                <label>
+                  Confirm Password
+                  <input id="signup-confirm-password" type="password" placeholder="Confirm your password">
+                </label>
+                <p class="auth-helper-text">Your email is used as your fixed account identifier. You will be able to change your username and password later from your profile.</p>
+                <div class="auth-actions auth-actions-stack">
+                  <button type="submit" class="primary-button">Create Account</button>
+                  <button type="button" class="secondary-button" data-screen-target="welcome">Back to Login</button>
+                </div>
+              </form>
+            </div>
+            <div class="welcome-shelf right"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="dashboard">
+        <div class="browser-frame theme-forest">
+          <div class="screen-content dashboard-layout">
+            <div class="dashboard-topbar">
+              <div class="app-brand light">
+                <span class="brand-dot"></span>
+                <span class="brand-name">PantryPal</span>
+              </div>
+              <div class="user-actions">
+                <span id="user-greeting">Hi Alex</span>
+                <span class="membership-chip is-hidden" id="membership-chip"></span>
+                <button class="soft-button" type="button" id="personal-tab" data-screen-target="recommendations">Recommendations</button>
+                <button class="soft-button is-hidden" type="button" id="profile-tab" data-screen-target="profile">Profile</button>
+                <button class="soft-button is-hidden" type="button" id="shopping-tab" data-screen-target="shopping">Shopping List</button>
+                <button class="soft-button" type="button" data-screen-target="pricing">Subscription</button>
+                <button class="soft-button" type="button" id="session-action">Logout</button>
+              </div>
+            </div>
+            <section class="dashboard-hero-grid dashboard-home-grid">
+              <div class="dashboard-intro-card">
+                <span class="hero-kicker light">PantryPal home</span>
+                <h2>Your PantryPal Overview</h2>
+                <p class="dashboard-note dashboard-note-static">Use this page as your starting point before you jump into recommendations, profile settings, shopping, or subscription management.</p>
+                <div class="dashboard-stat-row">
+                  <article class="dashboard-stat-card">
+                    <strong>Search instantly</strong>
+                    <span>Find recipes by ingredients or dish name from one clean starting page.</span>
+                  </article>
+                  <article class="dashboard-stat-card">
+                    <strong>Plan the week</strong>
+                    <span>Open a full 7-day recommendation view with meal pictures and linked shopping.</span>
+                  </article>
+                  <article class="dashboard-stat-card">
+                    <strong>Manage your account</strong>
+                    <span>Update profile settings, saved favourites, and subscription details in one place.</span>
+                  </article>
+                </div>
+              </div>
+              <aside class="dashboard-insight-card dashboard-home-card">
+                <div class="insight-copy">
+                  <span class="showcase-label">Quick actions</span>
+                  <h3>Go where you need without landing inside a crowded recommendation page first.</h3>
+                  <p>Start with a quick search, open your recommendation plan, review shopping, or manage your subscription from this overview hub.</p>
+                </div>
+              </aside>
+            </section>
+            <section class="dashboard-action-grid" aria-label="PantryPal primary actions">
+              <button class="dashboard-action-card" type="button" data-screen-target="recommendations">
+                <span class="showcase-label">7-day plan</span>
+                <strong>Open recommendations</strong>
+                <span>View the full weekly meal plan with food photos and linked recipe cards.</span>
+              </button>
+              <button class="dashboard-action-card" type="button" data-screen-target="profile">
+                <span class="showcase-label">Account</span>
+                <strong>Manage profile</strong>
+                <span>Update username, password, favourite ingredients, and saved recipes.</span>
+              </button>
+              <button class="dashboard-action-card" type="button" data-screen-target="shopping">
+                <span class="showcase-label">Shopping</span>
+                <strong>Review shopping list</strong>
+                <span>Browse weekly items grouped into simple shopping categories.</span>
+              </button>
+              <button class="dashboard-action-card" type="button" data-screen-target="pricing">
+                <span class="showcase-label">Subscription</span>
+                <strong>View plans</strong>
+                <span>See your current access, compare plans, and manage subscription status.</span>
+              </button>
+            </section>
+            <section class="dashboard-search-section">
+              <div class="section-heading-row">
+                <div>
+                  <h3>Search for recipes now</h3>
+                  <span>Use ingredients or a dish name to open a cleaner recipe results page.</span>
+                </div>
+              </div>
+              <form class="search-bar search-bar-home" id="ingredient-form">
+                <input id="ingredient-input" type="text" placeholder="Rice, Tomato, Potato or Eggs Benedict" aria-label="Quick ingredient input">
+                <button type="submit" class="primary-button">Find New Recipes</button>
+              </form>
+            </section>
+            <section class="saved-recipes-panel" id="saved-recipes-panel">
+              <div class="section-heading-row">
+                <h3>Favourite Recipes</h3>
+                <span>Quick access to meals you want to keep using</span>
+              </div>
+              <div class="saved-recipes-list" id="saved-recipes-list"></div>
+            </section>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="recommendations">
+        <div class="browser-frame theme-forest">
+          <div class="screen-content dashboard-layout recommendation-layout">
+            <div class="screen-toolbar recommendation-toolbar">
+              <button class="back-button back-button-light" type="button" data-screen-target="dashboard">Back to Overview</button>
+            </div>
+            <section class="recommendation-header-clean">
+              <div class="dashboard-intro-card recommendation-intro-card">
+                <span class="hero-kicker light">Your meal plan</span>
+                <h2 class="recommendation-screen-title" id="recommendation-heading">7 Day Recommendation Plan</h2>
+                <p class="dashboard-note" id="dashboard-note"></p>
+              </div>
+              <aside class="recommendation-summary-card">
+                <span class="showcase-label">Weekly view</span>
+                <h3>Browse all seven days in a cleaner three-column layout.</h3>
+                <p>Open any meal tile to view the full recipe, ingredients, and cooking instructions.</p>
+              </aside>
+            </section>
+            <div class="dashboard-actions">
+              <button class="primary-button is-hidden" type="button" id="guest-refresh">Show More Recipes</button>
+            </div>
+            <div class="card-row" id="recommendation-grid"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="profile">
+        <div class="browser-frame">
+          <div class="screen-content profile-layout">
+            <div class="profile-shell">
+              <div class="screen-toolbar">
+                <button class="back-button" type="button" data-screen-target="dashboard">Back</button>
+              </div>
+              <div class="profile-header">
+                <div class="app-brand">
+                  <span class="brand-dot"></span>
+                  <span class="brand-name">PantryPal</span>
+                </div>
+                <h2>Your Profile</h2>
+                <p>Manage your account details, saved ingredients, favourite recipes, and account status from one cleaner page.</p>
+              </div>
+              <div class="profile-overview-grid">
+                <section class="profile-overview-card">
+                  <span class="showcase-label">Account hub</span>
+                  <h3>Keep your PantryPal identity and saved cooking preferences in one place.</h3>
+                  <p>Update your username, refresh your password, and manage account access without cramped sections.</p>
+                </section>
+                <section class="profile-overview-card warm">
+                  <span class="showcase-label">Recommendation engine</span>
+                  <h3>Favourite ingredients and saved meals shape the next weekly plan.</h3>
+                  <p>PantryPal uses what you save here to refresh recommendations and shopping support across the week.</p>
+                </section>
+              </div>
+              <div class="profile-grid">
+                <section class="profile-card">
+                  <h3>Account Details</h3>
+                  <form class="profile-form" id="profile-form">
+                    <label>
+                      Username
+                      <input id="profile-username" type="text" placeholder="Username">
+                    </label>
+                    <label>
+                      Email
+                      <input id="profile-email" type="email" placeholder="Email" readonly>
+                    </label>
+                    <p class="profile-field-note">Email stays fixed after sign up and remains your permanent PantryPal account record.</p>
+                    <label>
+                      Password
+                      <input id="profile-password" type="password" placeholder="New password">
+                    </label>
+                    <button class="primary-button" type="submit">Save Profile</button>
+                  </form>
+                  <div class="account-status-panel">
+                    <div class="account-status-row">
+                      <span>Account status</span>
+                      <strong id="profile-account-status">Active</strong>
+                    </div>
+                    <p class="profile-tip" id="profile-account-note">Your PantryPal account is active and available for sign-in.</p>
+                    <div class="account-danger-actions">
+                      <button class="danger-button" type="button" id="delete-account-button">Delete Account</button>
+                    </div>
+                    <form class="delete-account-form is-hidden" id="delete-account-form">
+                      <label>
+                        Reason for deleting your account
+                        <textarea id="delete-account-reason" rows="4" placeholder="Tell us why you want to delete your PantryPal account"></textarea>
+                      </label>
+                      <div class="auth-actions">
+                        <button class="danger-button" type="submit">Confirm Delete</button>
+                        <button class="secondary-button" type="button" id="cancel-delete-account-button">Cancel</button>
+                      </div>
+                      <p class="profile-field-note">This permanently removes your PantryPal account from the active users database and stores the deletion reason separately for project records.</p>
+                    </form>
+                  </div>
+                </section>
+                <section class="profile-card">
+                  <h3>Favourite Ingredients</h3>
+                  <form class="favorite-form" id="favorite-form">
+                    <input id="favorite-input" type="text" placeholder="Add ingredient">
+                    <button class="primary-button" type="submit">Add</button>
+                  </form>
+                  <div class="favorite-list" id="favorite-list"></div>
+                  <p class="profile-tip">Recommendations keep updating from these ingredients while still rotating with different meals.</p>
+                </section>
+                <section class="profile-card profile-card-wide">
+                  <h3>Favourite Recipes</h3>
+                  <div class="saved-recipes-list profile-saved-list" id="profile-saved-recipes"></div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="shopping">
+        <div class="browser-frame">
+          <div class="screen-content profile-layout">
+            <div class="shopping-shell">
+              <div class="screen-toolbar">
+                <button class="back-button" type="button" data-screen-target="dashboard">Back</button>
+              </div>
+              <div class="profile-header">
+                <div class="app-brand">
+                  <span class="brand-dot"></span>
+                  <span class="brand-name">PantryPal</span>
+                </div>
+                <h2>Weekly Shopping List</h2>
+                <p>Generated from your 7-day meal plan so you know what to buy and how much to buy for the week.</p>
+              </div>
+              <div class="shopping-overview-grid">
+                <section class="profile-overview-card">
+                  <span class="showcase-label">Smarter shopping</span>
+                  <h3>Grouped tabs help you jump straight to dairy, vegetables, meat, frozen, and more.</h3>
+                  <p>This page is designed to feel like a practical planning tool, not a long unstructured note.</p>
+                </section>
+                <section class="profile-overview-card warm">
+                  <span class="showcase-label">Built from your plan</span>
+                  <h3>Ingredient quantities follow the weekly recommendations already generated for you.</h3>
+                  <p>That keeps PantryPal connected from discovery, to meal plan, to shopping execution.</p>
+                </section>
+              </div>
+              <div class="shopping-tabs" id="shopping-tabs"></div>
+              <div class="shopping-grid" id="shopping-grid"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="results">
+        <div class="browser-frame">
+          <div class="screen-content results-layout">
+            <div class="screen-toolbar">
+              <button class="back-button" type="button" data-screen-target="dashboard">Back</button>
+            </div>
+            <div class="results-header">
+              <div class="app-brand">
+                <span class="brand-dot"></span>
+                <span class="brand-name">PantryPal</span>
+              </div>
+            </div>
+            <div class="results-hero-grid">
+              <div class="results-heading-block">
+                <div class="status-pill status-online" id="api-status">Recipe Service Ready</div>
+                <h2 id="results-title">Results for Chicken, Spinach, Tomato, Rice</h2>
+                <div class="results-chip-row">
+                  <span class="section-chip">Ingredient search</span>
+                  <span class="section-chip">Dish search</span>
+                  <span class="section-chip">Save to favourites</span>
+                </div>
+              </div>
+              <aside class="results-side-card">
+                <span class="showcase-label">Recipe discovery</span>
+                <h3>Shortlist what fits your pantry, then open the full recipe view.</h3>
+                <p>PantryPal uses a more content-rich results layout so recipe search feels closer to a real food website than a plain results grid.</p>
+              </aside>
+            </div>
+            <p class="results-note" id="results-note">Enter ingredients to search recipes.</p>
+            <p class="results-error" id="results-error"></p>
+            <div class="results-grid" id="results-grid"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="recipe">
+        <div class="browser-frame">
+          <div class="screen-content recipe-layout">
+            <div class="screen-toolbar">
+              <button class="back-button" type="button" id="recipe-back-button">Back</button>
+            </div>
+            <div class="recipe-head">
+              <h2 id="recipe-title">Recipe</h2>
+              <button class="icon-button" aria-label="Search">&#8981;</button>
+            </div>
+            <p class="recipe-subtitle">A full recipe view with ingredients, instructions, pantry-friendly planning, and quick actions for saving favourites.</p>
+            <div class="recipe-meta-strip">
+              <span class="section-chip">Recipe detail</span>
+              <span class="section-chip">Shopping-ready</span>
+              <span class="section-chip">Saveable</span>
+            </div>
+            <div class="hero-dish thumb thumb-noodles" id="recipe-hero"></div>
+            <section class="recipe-story-card">
+              <span class="showcase-label">Cooking notes</span>
+              <p>Review the ingredients, method, serving details, and shopping context before you start cooking.</p>
+            </section>
+            <div class="recipe-grid">
+              <aside class="ingredients-panel">
+                <h3>Ingredients</h3>
+                <ul id="recipe-ingredients"></ul>
+                <button class="primary-button wide" type="button" id="save-recipe-button">Save to Favourites</button>
+              </aside>
+              <section class="instructions-panel">
+                <div class="instruction-meta">
+                  <div>
+                    <span class="meta-label">Prep Time</span>
+                    <strong id="recipe-ready">20 mins</strong>
+                  </div>
+                  <div>
+                    <span class="meta-label">Servings</span>
+                    <strong id="recipe-servings">2</strong>
+                  </div>
+                </div>
+                <h3>Instructions</h3>
+                <ol id="recipe-instructions"></ol>
+                <div class="tip-row">
+                  <p id="recipe-tip"></p>
+                  <button class="soft-outline" type="button" id="recipe-return-button">Return</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="pricing">
+        <div class="browser-frame">
+          <div class="screen-content pricing-layout">
+            <div class="pricing-shell">
+              <div class="screen-toolbar pricing-toolbar">
+                <button class="back-button" type="button" data-screen-target="dashboard">Back</button>
+              </div>
+              <div class="app-brand pricing-brand">
+                <span class="brand-dot"></span>
+                <span class="brand-name">PantryPal</span>
+              </div>
+              <h2>Unlock Unlimited Recipes</h2>
+              <p class="pricing-intro">
+                Choose the PantryPal plan that fits your cooking routine. Free access covers the basics, while paid plans unlock full weekly planning and broader recipe discovery.
+              </p>
+              <section class="pricing-benefit-grid">
+                <article class="pricing-benefit-card">
+                  <span class="showcase-label">For regular home cooks</span>
+                  <h3>Keep recommendations, favourites, and shopping connected.</h3>
+                </article>
+                <article class="pricing-benefit-card">
+                  <span class="showcase-label">For meal planners</span>
+                  <h3>Unlock premium planning, wider discovery, and easier repeat cooking.</h3>
+                </article>
+                <article class="pricing-benefit-card">
+                  <span class="showcase-label">For subscription clarity</span>
+                  <h3>See active plan details, renewal status, and unsubscribe options in one place.</h3>
+                </article>
+              </section>
+              <div class="subscription-manage is-hidden" id="subscription-manage">
+                <div class="subscription-manage-header">
+                  <span class="subscription-status-badge" id="subscription-status-badge">Active subscription</span>
+                  <h3 id="subscription-active-plan">Weekly Plan</h3>
+                  <p id="subscription-manage-note">Your subscription is active and ready to use across PantryPal recommendations, saved recipes, and smart shopping support.</p>
+                </div>
+                <div class="subscription-manage-grid">
+                  <article class="subscription-manage-card">
+                    <h4>Current Plan</h4>
+                    <div class="manage-row">
+                      <span>Plan</span>
+                      <strong id="subscription-current-plan">Weekly Plan</strong>
+                    </div>
+                    <div class="manage-row">
+                      <span>Status</span>
+                      <strong id="subscription-current-status">Active</strong>
+                    </div>
+                    <div class="manage-row">
+                      <span>Billing</span>
+                      <strong id="subscription-current-billing">$0.01/week</strong>
+                    </div>
+                    <div class="manage-row">
+                      <span>Time left</span>
+                      <strong id="subscription-days-left">Not active</strong>
+                    </div>
+                  </article>
+                  <article class="subscription-manage-card">
+                    <h4>Before You Unsubscribe</h4>
+                    <ul class="subscription-manage-list">
+                      <li>Your plan will return to Free access</li>
+                      <li>Saved recipes and favourites will remain in your account</li>
+                      <li>Premium recommendation and planning features will be reduced</li>
+                      <li>You can subscribe again later from this page</li>
+                    </ul>
+                    <button class="secondary-button wide" type="button" id="unsubscribe-button">Unsubscribe</button>
+                  </article>
+                </div>
+              </div>
+              <div class="pricing-grid" id="pricing-grid">
+                <article class="price-card">
+                  <h3>Free</h3>
+                  <p class="plan-note">Limited access</p>
+                  <ul>
+                    <li>View a limited set of recipes</li>
+                    <li>Basic pantry tracking</li>
+                    <li>Standard recommendations only</li>
+                    <li>No advanced meal planning</li>
+                  </ul>
+                  <button class="plan-button plan-button-muted" type="button" disabled>Current Free Plan</button>
+                </article>
+                <article class="price-card featured">
+                  <span class="featured-badge">Most Popular</span>
+                  <h3>Weekly Plan</h3>
+                  <p class="price-tag">$0.01<span>/week</span></p>
+                  <ul>
+                    <li>Unlimited recipes</li>
+                    <li>Personal AI recommendations</li>
+                    <li>Ad-free experience</li>
+                    <li>Weekly meal planner</li>
+                    <li>Priority pantry matching</li>
+                  </ul>
+                  <button class="plan-button" type="button" data-plan-name="Weekly Plan" data-plan-price="$0.01/week">Subscribe Weekly</button>
+                </article>
+                <article class="price-card">
+                  <h3>Monthly Plan</h3>
+                  <p class="price-tag">$0.02<span>/month</span></p>
+                  <ul>
+                    <li>Everything in Weekly Plan</li>
+                    <li>Lower monthly cost</li>
+                    <li>Unlimited saved meal plans</li>
+                    <li>Full premium recipe access</li>
+                    <li>Smart shopping suggestions</li>
+                  </ul>
+                  <button class="plan-button" type="button" data-plan-name="Monthly Plan" data-plan-price="$0.02/month">Subscribe Monthly</button>
+                </article>
+              </div>
+              <p class="pricing-footer-note" id="pricing-footer-note">All subscription buttons connect to the configured Stripe checkout flow for this website.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen" id="payment">
+        <div class="browser-frame">
+          <div class="screen-content payment-layout">
+            <div class="payment-shell">
+              <div class="screen-toolbar pricing-toolbar">
+                <button class="back-button" type="button" data-screen-target="pricing">Back</button>
+              </div>
+              <div class="payment-header">
+                <div class="app-brand pricing-brand">
+                  <span class="brand-dot"></span>
+                  <span class="brand-name">PantryPal</span>
+                </div>
+                <div class="payment-badge">Powered by Stripe Checkout</div>
+                <h2>Complete Your Subscription</h2>
+                <p>Review your selected plan and continue to Stripe Checkout for secure card entry and confirmation.</p>
+              </div>
+              <section class="payment-trust-grid">
+                <article class="pricing-benefit-card">
+                  <span class="showcase-label">Secure payment</span>
+                  <h3>PantryPal sends you to Stripe for secure card handling and payment confirmation.</h3>
+                </article>
+                <article class="pricing-benefit-card">
+                  <span class="showcase-label">Plan management</span>
+                  <h3>Your plan stays linked to your PantryPal profile, recommendations, and saved cooking tools.</h3>
+                </article>
+              </section>
+
+              <div class="payment-grid">
+                <section class="payment-card payment-summary">
+                  <h3>Order Summary</h3>
+                  <div class="accepted-cards" aria-label="Accepted payment methods">
+                    <span class="accepted-card">Visa accepted</span>
+                    <span class="accepted-card">Mastercard accepted</span>
+                    <span class="accepted-card">Debit cards accepted</span>
+                  </div>
+                  <div class="summary-row">
+                    <span>Selected plan</span>
+                    <strong id="payment-plan-name">Weekly Plan</strong>
+                  </div>
+                  <div class="summary-row">
+                    <span>Price</span>
+                    <strong id="payment-plan-price">$0.01/week</strong>
+                  </div>
+                  <div class="summary-row">
+                    <span>Status</span>
+                    <strong id="payment-summary-status">Secure checkout</strong>
+                  </div>
+                  <p class="payment-note" id="payment-note">PantryPal uses Stripe Checkout for payment. Visa, Mastercard, and standard debit cards are supported on the secure hosted payment page.</p>
+                </section>
+
+                <section class="payment-card">
+                  <h3>Secure Checkout</h3>
+                  <form id="payment-form" class="payment-form">
+                    <div class="payment-hosted-panel">
+                      <strong>Stripe hosted payment</strong>
+                      <p>Your card details are never entered on PantryPal. After you continue, Stripe opens a secure checkout page where Visa, Mastercard, and supported debit cards are validated in real time.</p>
+                    </div>
+                    <label>
+                      Billing Email
+                      <input id="billing-email" type="email" placeholder="alex@pantrypal.com">
+                    </label>
+                    <div class="payment-security-note">
+                      <strong>Secure checkout</strong>
+                      <span>Stripe handles the payment form, confirmation, and secure processing after PantryPal sends you to checkout.</span>
+                    </div>
+                    <button class="primary-button wide" type="submit" id="payment-submit">Continue to Stripe</button>
+                  </form>
+                  <p class="payment-status" id="payment-status"></p>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="script.js?v=20260505professional"></script>
+</body>
+</html>
