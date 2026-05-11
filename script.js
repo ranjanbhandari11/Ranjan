@@ -701,7 +701,7 @@ function getThumbClass(recipe) {
   return recipe.imageClass || "thumb-green";
 }
 
-function getRecipeImageUrl(recipe) {
+function getRecipeImageUrl(recipe, variant = 0) {
   if (recipe?.imageUrl) {
     return String(recipe.imageUrl);
   }
@@ -714,15 +714,18 @@ function getRecipeImageUrl(recipe) {
     return override;
   }
   if (recipe?.image && String(recipe.image).startsWith("thumb-") && thumbImageUrls[recipe.image]) {
-    return thumbImageUrls[recipe.image];
+    const fallbackClasses = Object.keys(thumbImageUrls);
+    const currentIndex = Math.max(0, fallbackClasses.indexOf(recipe.image));
+    const variantIndex = Math.abs(currentIndex + Number(variant || 0)) % fallbackClasses.length;
+    return thumbImageUrls[fallbackClasses[variantIndex]];
   }
   const fallbackClasses = Object.keys(thumbImageUrls);
-  const seed = hashRecipeText(`${recipe?.id || ""}|${recipe?.title || ""}|${recipe?.category || ""}`);
+  const seed = hashRecipeText(`${recipe?.id || ""}|${recipe?.title || ""}|${recipe?.category || ""}`, variant);
   return thumbImageUrls[fallbackClasses[seed % fallbackClasses.length]] || thumbImageUrls["thumb-green"];
 }
 
-function getThumbStyle(recipe) {
-  return `style="background-image: linear-gradient(180deg, rgba(15, 23, 17, 0.08), rgba(15, 23, 17, 0.18)), url('${getRecipeImageUrl(recipe)}'); background-size: cover; background-position: center;"`;
+function getThumbStyle(recipe, variant = 0) {
+  return `style="background-image: linear-gradient(180deg, rgba(15, 23, 17, 0.08), rgba(15, 23, 17, 0.18)), url('${getRecipeImageUrl(recipe, variant)}'); background-size: cover; background-position: center;"`;
 }
 
 function setApiStatus(isOnline, label) {
@@ -1386,7 +1389,7 @@ function getRecipeMealType(recipe) {
     return "light";
   }
 
-  if (tags.includes("light") || tags.includes("supper") || /(starter|side|salad|soup|snack|vegetarian)/.test(category) || /(salad|soup|snack|wrap|toast|plate|cup)/.test(title)) {
+  if (tags.includes("light") || tags.includes("supper") || /(starter|side|salad|soup|snack)/.test(category) || /(salad|soup|snack|wrap|toast|plate|cup)/.test(title)) {
     return "light";
   }
 
@@ -1423,8 +1426,19 @@ function getSlotCandidates(label, normalizedPool) {
   const slotType = getSlotType(label);
   const typedPool = normalizedPool.filter((recipe) => getRecipeMealType(recipe) === slotType);
   const fallbackPool = mealSlotFallbackRecipes.filter((recipe) => getRecipeMealType(recipe) === slotType);
-  const alternatePool = normalizedPool.filter((recipe) => getRecipeMealType(recipe) !== slotType);
-  return uniqueRecipesByName([...typedPool, ...fallbackPool, ...alternatePool]);
+  const typedCandidates = uniqueRecipesByName([...typedPool, ...fallbackPool]);
+  if (typedCandidates.length >= 3) {
+    return typedCandidates;
+  }
+
+  return uniqueRecipesByName([
+    ...typedCandidates,
+    ...fallbackPool.map((recipe, index) => ({
+      ...recipe,
+      id: `${recipe.id}-${slotType}-${index}`,
+      title: `${recipe.title} ${index + 1}`
+    }))
+  ]);
 }
 
 function groupRecipesForSevenDays(pool, totalDays = 7) {
@@ -1874,9 +1888,9 @@ function renderShoppingList() {
 function renderSavedRecipes() {
   const recipes = state.currentUser?.savedRecipes || [];
   const markup = recipes.length
-    ? recipes.map((recipe) => `
+    ? recipes.map((recipe, index) => `
         <article class="saved-recipe-item">
-          <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+          <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
           <div>
             <strong>${recipe.title}</strong>
             <span>${recipe.match ? `${recipe.match}% match` : "Saved recipe"}</span>
@@ -1907,12 +1921,12 @@ function renderSavedRecipes() {
   });
 }
 
-function renderMealSlot(meal) {
+function renderMealSlot(meal, variant = 0) {
   const recipe = meal.recipe;
   return `
     <button class="meal-slot meal-slot-card" type="button" data-plan-recipe="${recipe.id}">
       <div class="meal-slot-photo">
-        <img src="${getRecipeImageUrl(recipe)}" alt="Recipe photo">
+        <img src="${getRecipeImageUrl(recipe, variant)}" alt="Recipe photo">
       </div>
       <div class="meal-slot-copy">
         <strong>${meal.label}</strong>
@@ -1971,7 +1985,7 @@ function renderWeeklySlider(plan) {
           <article class="day-plan-card week-plan-card">
             <h4>Day ${dayPlan.day}</h4>
             <div class="meal-slot-list">
-              ${dayPlan.meals.map((meal) => renderMealSlot(meal)).join("")}
+              ${dayPlan.meals.map((meal, mealIndex) => renderMealSlot(meal, (dayPlan.day * 10) + mealIndex)).join("")}
             </div>
           </article>
         `).join("")}
@@ -2082,9 +2096,9 @@ function renderResults(recipes, label) {
   setResultsError("");
 
   refs.resultsGrid.innerHTML = recipes
-    .map((recipe) => `
+    .map((recipe, index) => `
       <article class="result-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}>
+        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}>
           <span class="match-pill">${recipe.match}% Match</span>
         </div>
         <div class="result-card-body">
@@ -2177,9 +2191,9 @@ async function renderFreeAccountRecommendations() {
     refs.recommendationPreview.innerHTML = "";
   }
   refs.recommendationGrid.className = "card-row";
-  refs.recommendationGrid.innerHTML = cards.map((recipe) => `
+  refs.recommendationGrid.innerHTML = cards.map((recipe, index) => `
     <article class="recipe-card">
-      <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+      <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
       <div class="recipe-card-body">
         <h3>${escapeHtml(recipe.title || recipe.name)}</h3>
         <p>${savedTitles.has(normalizeIngredientKey(recipe.title || recipe.name || "")) ? "Saved favourite recipe" : `${getRecipeMatchScore(recipe, fallbackSeeds)}% match`}</p>
@@ -2216,9 +2230,9 @@ function renderRecommendationFallbackCards(error = null) {
     refs.recommendationPreview.innerHTML = "";
   }
   refs.recommendationGrid.className = "card-row recommendation-fallback-grid";
-  refs.recommendationGrid.innerHTML = cards.map((recipe) => `
+  refs.recommendationGrid.innerHTML = cards.map((recipe, index) => `
     <article class="recipe-card">
-      <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+      <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
       <div class="recipe-card-body">
         <h3>${escapeHtml(recipe.title || recipe.name || "PantryPal Recipe")}</h3>
         <p>${getRecipeMatchScore(recipe, favorites)}% match</p>
@@ -2248,9 +2262,9 @@ async function renderRecommendationsLegacy() {
     let guestResults = guestFallback;
     state.currentResults = guestResults;
     refs.recommendationGrid.className = "card-row";
-    refs.recommendationGrid.innerHTML = guestResults.map((recipe) => `
+    refs.recommendationGrid.innerHTML = guestResults.map((recipe, index) => `
       <article class="recipe-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
         <div class="recipe-card-body">
           <h3>${recipe.title}</h3>
           <p>Guest recommendation</p>
@@ -2272,9 +2286,9 @@ async function renderRecommendationsLegacy() {
     }
 
     refs.recommendationGrid.className = "card-row";
-    refs.recommendationGrid.innerHTML = guestResults.map((recipe) => `
+    refs.recommendationGrid.innerHTML = guestResults.map((recipe, index) => `
       <article class="recipe-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
         <div class="recipe-card-body">
           <h3>${recipe.title}</h3>
           <p>Guest recommendation</p>
@@ -2414,9 +2428,9 @@ function renderRecommendationCards(cards, label = "Recommendation") {
   state.currentResults = allCards;
   refs.recommendationGrid.className = "card-row recommendation-card-grid";
   refs.recommendationGrid.innerHTML = `
-    ${safeCards.map((recipe) => `
+    ${safeCards.map((recipe, index) => `
       <article class="recipe-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
         <div class="recipe-card-body">
           <h3>${escapeHtml(recipe.title || recipe.name || "PantryPal Recipe")}</h3>
           <p>${label === "Personalised" ? `${getRecipeMatchScore(recipe, state.currentUser?.favorites || [])}% match` : label}</p>
