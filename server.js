@@ -1181,13 +1181,19 @@ app.post("/api/email/test", async (req, res) => {
       html: "<p>This is a <strong>PantryPal delivery test</strong> from the deployed backend.</p>"
     });
 
-    res.status(result.sent ? 200 : 502).json({
+    res.status(200).json({
       ok: result.sent,
       sent: result.sent,
       provider: result.provider || null,
       messageId: result.messageId || "",
       reason: result.reason || "",
-      attempts: result.attempts || []
+      attempts: result.attempts || [],
+      configured: {
+        smtp: Boolean(mailer && EMAIL_FROM),
+        gmailFallback: Boolean(normalizeTerm(SMTP_HOST) === "smtp.gmail.com" && SMTP_USER && SMTP_PASS),
+        resend: Boolean(RESEND_API_KEY && EMAIL_FROM),
+        firebase: Boolean(FIREBASE_PUBLIC_CONFIG.apiKey)
+      }
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message || "Email test failed." });
