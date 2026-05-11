@@ -2189,13 +2189,28 @@ async function renderRecommendations() {
     state.currentMealPlan = [];
 
     if (state.isGuestSession) {
+      const guestSeeds = normalizeIngredientList(state.currentUser?.favorites || []);
+      const guestSeedText = guestSeeds.join(", ");
       refs.recommendationHeading.textContent = "Guest Recipe Recommendations";
-      refs.dashboardNote.textContent = "Fresh recipe ideas based on your guest ingredients, plus a rotating mix of popular meals.";
-      const guestFallback = buildLocalResults((state.currentUser?.favorites || []).join(", ") || "Chicken, Rice, Tomato").slice(0, 12);
+      refs.dashboardNote.textContent = guestSeeds.length
+        ? `General recipe ideas plus extra matches for your guest favourites: ${guestSeedText}.`
+        : "General recipe ideas for this guest session. Add favourite ingredients before starting a guest session to personalise this list.";
+      const guestFallback = uniqueRecipesByName([
+        ...buildLocalResults(guestSeedText || "Chicken, Rice, Tomato, Pasta, Eggs"),
+        ...recipePool
+      ]).slice(0, 12);
       renderRecommendationCards(guestFallback, "Guest recommendation");
 
       try {
-        const guestResults = await fetchGuestRecommendations();
+        const [favouriteMatches, generalMatches] = await Promise.all([
+          guestSeeds.length ? fetchFavoriteIngredientPool(guestSeeds, 8).catch(() => []) : Promise.resolve([]),
+          fetchGuestRecommendations().catch(() => [])
+        ]);
+        const guestResults = uniqueRecipesByName([
+          ...favouriteMatches,
+          ...generalMatches,
+          ...guestFallback
+        ]).slice(0, 12);
         renderRecommendationCards(guestResults.length ? guestResults : guestFallback, "Guest recommendation");
       } catch (_error) {
         renderRecommendationCards(guestFallback, "Guest recommendation");
@@ -2212,6 +2227,61 @@ async function renderRecommendations() {
     const savedRecipeIngredients = savedRecipes.flatMap((recipe) => getRecipeIngredientNames(recipe)).slice(0, 8);
     const seeds = savedIngredients.length ? savedIngredients : (savedRecipeIngredients.length ? savedRecipeIngredients : ["Chicken", "Rice", "Tomato", "Spinach", "Pasta", "Eggs"]);
     const seedText = seeds.join(", ");
+
+    const planningDayCount = getPlanningDayCount();
+    if (planningDayCount > 0) {
+      const planLabel = planningDayCount === 30 ? "30 Day Recommendation Plan" : "7 Day Recommendation Plan";
+      refs.recommendationHeading.textContent = `Your ${planLabel}`;
+      refs.dashboardNote.textContent = savedIngredients.length || savedRecipes.length
+        ? `Built from your saved favourites: ${seedText}. ${planningDayCount === 30 ? "Use the week tabs to move through all 30 days." : "Use this 7-day plan with the linked shopping list."}`
+        : `A premium ${planningDayCount}-day meal plan using balanced breakfast, light-meal, lunch, dinner, and supper ideas. Save favourite ingredients to personalise the next refresh.`;
+      if (refs.recommendationNote) {
+        refs.recommendationNote.textContent = planningDayCount === 30
+          ? "30-day subscribers receive Week 1 to Week 5 planning and matching shopping lists."
+          : "7-day subscribers receive one weekly plan and a matching shopping list.";
+      }
+
+      let planPool = uniqueRecipesByName([
+        ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 94) })),
+        ...buildLocalResults(seedText),
+        ...recipePool,
+        ...mealSlotFallbackRecipes
+      ]);
+
+      state.currentMealPlan = groupRecipesForSevenDays(planPool, planningDayCount);
+      state.currentPlanDayIndex = 0;
+      state.activePlanWeekIndex = 0;
+      state.activeShoppingWeekIndex = 0;
+      state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
+      renderWeeklySlider(state.currentMealPlan);
+      attachPlanRecipeActions();
+      renderShoppingList();
+
+      try {
+        const [favouriteMatches, varietyMatches] = await Promise.all([
+          fetchFavoriteIngredientPool(seeds, 14).catch(() => []),
+          fetchRecipeVarietyPool(18).catch(() => [])
+        ]);
+        planPool = uniqueRecipesByName([
+          ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 94) })),
+          ...favouriteMatches,
+          ...varietyMatches,
+          ...planPool
+        ]);
+        state.currentMealPlan = groupRecipesForSevenDays(planPool, planningDayCount);
+        state.currentPlanDayIndex = 0;
+        state.activePlanWeekIndex = 0;
+        state.activeShoppingWeekIndex = 0;
+        state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
+        renderWeeklySlider(state.currentMealPlan);
+        attachPlanRecipeActions();
+        renderShoppingList();
+      } catch (_error) {
+        // The local plan above remains usable if the public recipe service is unavailable.
+      }
+      return;
+    }
+
     const fallbackCards = uniqueRecipesByName([
       ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 93) })),
       ...buildLocalResults(seedText),
