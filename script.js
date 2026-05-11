@@ -1868,12 +1868,22 @@ function renderWeeklySlider(plan) {
     return;
   }
 
+  const flatMeals = [];
+  plan.forEach((dayPlan, dayIndex) => {
+    dayPlan.meals.forEach((meal, mealIndex) => {
+      flatMeals.push({ dayIndex, mealIndex, recipe: meal.recipe });
+    });
+  });
+  const uniqueMealImages = withUniqueDisplayImages(flatMeals.map((meal) => meal.recipe), 401);
   const displayPlan = plan.map((dayPlan, dayIndex) => ({
     ...dayPlan,
-    meals: dayPlan.meals.map((meal, mealIndex) => ({
-      ...meal,
-      recipe: withUniqueDisplayImages([meal.recipe], (dayIndex * 17) + mealIndex)[0]
-    }))
+    meals: dayPlan.meals.map((meal, mealIndex) => {
+      const flatIndex = flatMeals.findIndex((entry) => entry.dayIndex === dayIndex && entry.mealIndex === mealIndex);
+      return {
+        ...meal,
+        recipe: uniqueMealImages[flatIndex] || meal.recipe
+      };
+    })
   }));
   const weekGroups = getPlanningWeekGroups(displayPlan);
   if (state.activePlanWeekIndex >= weekGroups.length) state.activePlanWeekIndex = 0;
