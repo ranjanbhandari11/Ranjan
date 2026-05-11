@@ -826,6 +826,28 @@ function parseFavoriteInput(value) {
     .filter(Boolean);
 }
 
+function normalizeIngredientKey(value) {
+  return canonicalIngredientName(value);
+}
+
+function normalizeIngredientList(values) {
+  const source = Array.isArray(values) ? values : parseFavoriteInput(values);
+  const seen = new Set();
+  return source
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = normalizeIngredientKey(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalisedIngredientList(values) {
+  return normalizeIngredientList(values);
+}
+
 function getCurrentUserEmail() {
   return normalizeTerm(state.currentUser?.email);
 }
