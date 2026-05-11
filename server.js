@@ -124,6 +124,8 @@ const mailer = SMTP_HOST && SMTP_USER && SMTP_PASS
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_PORT === 465,
+      family: 4,
+      requireTLS: SMTP_PORT === 587,
       connectionTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
       greetingTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
       socketTimeout: 12000,
@@ -335,20 +337,46 @@ async function sendEmailDetailed({ to, subject, text, html }) {
   }
 
   if (normalizeTerm(SMTP_HOST) === "smtp.gmail.com" && SMTP_USER && SMTP_PASS) {
-    try {
-      const gmailFallbackMailer = nodemailer.createTransport({
-        service: "gmail",
-        connectionTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
-        greetingTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
-        socketTimeout: 12000,
-        auth: { user: SMTP_USER, pass: SMTP_PASS }
-      });
-      const info = await sendMailWithTimeout(gmailFallbackMailer, { from: EMAIL_FROM, to, subject, text, html });
-      return { sent: true, provider: "gmail", messageId: info?.messageId || "", attempts };
-    } catch (error) {
-      const reason = publicEmailError(error, "gmail");
-      attempts.push({ provider: "gmail", reason });
-      console.error("PantryPal Gmail fallback delivery failed:", reason);
+    const gmailFallbacks = [
+      {
+        provider: "gmail-465",
+        options: {
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          family: 4,
+          connectionTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
+          greetingTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
+          socketTimeout: 12000,
+          auth: { user: SMTP_USER, pass: SMTP_PASS }
+        }
+      },
+      {
+        provider: "gmail-587",
+        options: {
+          host: "smtp.gmail.com",
+          port: 587,
+          secure: false,
+          requireTLS: true,
+          family: 4,
+          connectionTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
+          greetingTimeout: EXTERNAL_REQUEST_TIMEOUT_MS,
+          socketTimeout: 12000,
+          auth: { user: SMTP_USER, pass: SMTP_PASS }
+        }
+      }
+    ];
+
+    for (const fallback of gmailFallbacks) {
+      try {
+        const gmailFallbackMailer = nodemailer.createTransport(fallback.options);
+        const info = await sendMailWithTimeout(gmailFallbackMailer, { from: EMAIL_FROM, to, subject, text, html });
+        return { sent: true, provider: fallback.provider, messageId: info?.messageId || "", attempts };
+      } catch (error) {
+        const reason = publicEmailError(error, fallback.provider);
+        attempts.push({ provider: fallback.provider, reason });
+        console.error(`PantryPal ${fallback.provider} delivery failed:`, reason);
+      }
     }
   }
 
@@ -1006,12 +1034,12 @@ async function bootstrapFirebaseAccount(user) {
 
 async function sendFirebaseEmailVerification(user) {
   if (!FIREBASE_PUBLIC_CONFIG.apiKey || !user?.email) {
-    return { sent: false, reason: "firebase-not-configured" };
+    return { sent: false, reason: "firebase-not-configured", bootstrap: null };
   }
 
   const bootstrap = await bootstrapFirebaseAccount(user);
   if (!bootstrap.ok && bootstrap.reason !== "email-already-exists") {
-    return { sent: false, reason: bootstrap.reason || "firebase-bootstrap-failed" };
+    return { sent: false, reason: bootstrap.reason || "firebase-bootstrap-failed", bootstrap };
   }
 
   try {
@@ -1029,7 +1057,7 @@ async function sendFirebaseEmailVerification(user) {
       "Firebase sign in"
     );
     if (!signInResponse.ok || !signInPayload.idToken) {
-      return { sent: false, reason: signInPayload?.error?.message || "firebase-signin-failed" };
+      return { sent: false, reason: signInPayload?.error?.message || "firebase-signin-failed", bootstrap };
     }
 
     const { response, payload } = await fetchJsonWithTimeout(
@@ -1045,11 +1073,11 @@ async function sendFirebaseEmailVerification(user) {
       "Firebase verification email"
     );
     if (response.ok) {
-      return { sent: true, provider: "firebase" };
+      return { sent: true, provider: "firebase", bootstrap };
     }
-    return { sent: false, reason: payload?.error?.message || "firebase-verification-email-failed" };
+    return { sent: false, reason: payload?.error?.message || "firebase-verification-email-failed", bootstrap };
   } catch (error) {
-    return { sent: false, reason: error.message || "firebase-verification-email-failed" };
+    return { sent: false, reason: error.message || "firebase-verification-email-failed", bootstrap };
   }
 }
 
@@ -1296,10 +1324,9 @@ app.post("/api/auth/request-password-reset", async (req, res) => {
     const resetUrl = getPasswordResetUrl(req, resetToken);
 
     const firebaseReset = await sendFirebasePasswordResetEmail(updatedUser);
-    const resetNotice = firebaseReset.sent
-      ? { sent: false, reason: "skipped-because-firebase-sent" }
-      : await sendPasswordResetNotice(updatedUser, resetUrl);
+    const resetNotice = await sendPasswordResetNotice(updatedUser, resetUrl);
     const notificationEmailSent = Boolean(resetNotice.sent || firebaseReset.sent);
+    const confirmedInboxProvider = resetNotice.sent ? resetNotice.provider : "";
 
     if (!notificationEmailSent) {
       const smtpReason = resetNotice.reason || "pantrypal-email-not-sent";
@@ -1338,6 +1365,8 @@ app.post("/api/auth/request-password-reset", async (req, res) => {
       ].filter(Boolean).join(","),
       resetLinkIssued: true,
       notificationEmailSent,
+      confirmedInboxDelivery: Boolean(confirmedInboxProvider),
+      firebaseAccepted: Boolean(firebaseReset.sent),
       emailDeliveryReason: [
         resetNotice.sent ? `pantrypal-${resetNotice.provider || "email"}` : (resetNotice.reason ? `pantrypal-email: ${resetNotice.reason}` : ""),
         firebaseReset.sent ? "firebase" : (firebaseReset.reason ? `firebase: ${firebaseReset.reason}` : "")
@@ -1524,16 +1553,17 @@ app.post("/api/auth/signup", async (req, res) => {
       favorites: ["Chicken", "Rice", "Tomato"]
     });
 
-    const firebaseBootstrap = await bootstrapFirebaseAccount(createdUser);
     const firebaseVerification = await sendFirebaseEmailVerification(createdUser);
-    const signupNotice = firebaseVerification.sent
-      ? { sent: false, reason: "skipped-because-firebase-verification-sent" }
-      : await sendSignupNotification(createdUser);
+    const firebaseBootstrap = firebaseVerification.bootstrap || await bootstrapFirebaseAccount(createdUser);
+    const signupNotice = await sendSignupNotification(createdUser);
     const notificationEmailSent = Boolean(signupNotice.sent || firebaseVerification.sent);
+    const confirmedInboxProvider = signupNotice.sent ? signupNotice.provider : "";
     res.status(201).json({
       user: signupNotice.user || createdUser,
       storageMode,
       notificationEmailSent,
+      confirmedInboxDelivery: Boolean(confirmedInboxProvider),
+      firebaseAccepted: Boolean(firebaseVerification.sent),
       emailDeliveryReason: notificationEmailSent
         ? [
             signupNotice.sent ? `welcome-email-sent-${signupNotice.provider || "email"}` : "",
@@ -1829,14 +1859,23 @@ app.post("/api/subscription/cancel", async (req, res) => {
       stripeCheckoutSessionId: ""
     });
 
-    await sendEmail({
+    const cancellationEmail = await sendEmailDetailed({
       to: user.email,
       subject: "PantryPal subscription cancelled",
       text: `Hi ${user.username}, your PantryPal subscription has been cancelled and your account is now on the Free Plan.`,
       html: `<p>Hi ${user.username},</p><p>Your PantryPal subscription has been cancelled and your account is now on the <strong>Free Plan</strong>.</p>`
     });
 
-    res.json({ ok: true, user });
+    res.json({
+      ok: true,
+      user,
+      cancellationEmail: {
+        sent: Boolean(cancellationEmail.sent),
+        provider: cancellationEmail.provider || null,
+        reason: cancellationEmail.reason || "",
+        attempts: cancellationEmail.attempts || []
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

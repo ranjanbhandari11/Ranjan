@@ -2633,7 +2633,13 @@ async function handleCheckoutStatus() {
       state.currentUser = normalizeUser(result.user);
       renderPricing();
       renderSessionChrome();
-      showToast("Subscription activated successfully.", "success");
+      const emailSent = Boolean(result.subscriptionEmail?.sent);
+      showToast(
+        emailSent
+          ? "Subscription activated successfully. Confirmation email sent."
+          : `Subscription activated successfully. Email delivery could not be confirmed${result.subscriptionEmail?.reason ? `: ${result.subscriptionEmail.reason}` : "."}`,
+        emailSent ? "success" : "warning"
+      );
       clearQueryParams();
       activateScreen("pricing");
     } catch (error) {
@@ -2785,11 +2791,15 @@ async function handleSignup(event) {
       method: "POST",
       body: JSON.stringify({ username, email, password })
     });
+    const pantryEmailSent = Boolean(result.confirmedInboxDelivery || result.emailDeliveryDetails?.pantrypalEmail?.sent);
+    const firebaseAccepted = Boolean(result.firebaseAccepted || result.emailDeliveryDetails?.firebase?.sent);
     showToast(
-      result.notificationEmailSent
+      pantryEmailSent
         ? `Sign up successful. Welcome email sent to ${email}.`
-        : "Sign up successful, but PantryPal could not confirm the welcome email delivery.",
-      result.notificationEmailSent ? "success" : "warning"
+        : firebaseAccepted
+          ? `Sign up successful. Firebase accepted the verification email for ${email}; check inbox and spam.`
+          : `Sign up successful, but email delivery failed: ${result.emailDeliveryReason || "provider timeout"}.`,
+      pantryEmailSent || firebaseAccepted ? "success" : "warning"
     );
     refs.signupForm.reset();
     unlockApp(result.user, false);
@@ -2837,23 +2847,30 @@ async function handleForgotPassword(event) {
         await state.firebaseAuth.sendPasswordResetEmail(result.email);
         result.notificationEmailSent = true;
         result.delivery = "firebase-client";
+        result.firebaseAccepted = true;
       } catch (firebaseError) {
         result.emailDeliveryReason = firebaseError.message || result.emailDeliveryReason;
       }
     }
 
+    const pantryEmailSent = Boolean(result.confirmedInboxDelivery || result.emailDeliveryDetails?.pantrypalEmail?.sent);
+    const firebaseAccepted = Boolean(result.firebaseAccepted || result.emailDeliveryDetails?.firebase?.sent || result.delivery === "firebase-client");
     setHelperText(
       refs.forgotPasswordNote,
-      result.notificationEmailSent
-        ? `Email sent to ${result.email}. The secure reset link expires in 60 minutes.`
-        : `Reset link prepared for ${result.email}, but email delivery failed: ${result.emailDeliveryReason || "provider rejected the message"}.`,
-      result.notificationEmailSent ? "success" : "warning"
+      pantryEmailSent
+        ? `Password reset email sent to ${result.email}. The secure reset link expires in 60 minutes.`
+        : firebaseAccepted
+          ? `Firebase accepted the reset request for ${result.email}. Check inbox and spam. PantryPal direct email delivery was not confirmed: ${result.emailDeliveryReason || "provider timeout"}.`
+          : `Reset link prepared for ${result.email}, but email delivery failed: ${result.emailDeliveryReason || "provider rejected the message"}.`,
+      pantryEmailSent || firebaseAccepted ? "success" : "warning"
     );
     showToast(
-      result.notificationEmailSent
+      pantryEmailSent
         ? `Password reset email sent to ${result.email}.`
-        : `Email delivery failed: ${result.emailDeliveryReason || "provider rejected the message"}.`,
-      result.notificationEmailSent ? "success" : "warning"
+        : firebaseAccepted
+          ? "Firebase accepted the reset email. Check inbox and spam."
+          : `Email delivery failed: ${result.emailDeliveryReason || "provider rejected the message"}.`,
+      pantryEmailSent || firebaseAccepted ? "success" : "warning"
     );
   } catch (error) {
     if (state.firebaseAuth && error.payload?.email) {
@@ -2861,10 +2878,10 @@ async function handleForgotPassword(event) {
         await state.firebaseAuth.sendPasswordResetEmail(error.payload.email);
         setHelperText(
           refs.forgotPasswordNote,
-          `Email sent to ${error.payload.email}. The secure reset link expires in 60 minutes.`,
+          `Firebase accepted the reset request for ${error.payload.email}. Check inbox and spam.`,
           "success"
         );
-        showToast(`Password reset email sent to ${error.payload.email}.`, "success");
+        showToast(`Firebase accepted the reset email for ${error.payload.email}.`, "success");
         return;
       } catch (firebaseError) {
         error.message = `${error.message || "Password reset request failed."} Firebase browser fallback also failed: ${firebaseError.message || firebaseError.code || "unknown error"}`;
@@ -3098,7 +3115,12 @@ async function handleUnsubscribe() {
     state.currentUser = normalizeUser(result.user);
     renderPricing();
     updateMembershipChip();
-    showToast("Subscription removed. Your account is back on Free Plan.", "success");
+    showToast(
+      result.cancellationEmail?.sent
+        ? "Subscription removed. Cancellation email sent."
+        : `Subscription removed. Cancellation email delivery could not be confirmed${result.cancellationEmail?.reason ? `: ${result.cancellationEmail.reason}` : "."}`,
+      result.cancellationEmail?.sent ? "success" : "warning"
+    );
     activateScreen("unsubscribed");
   } catch (error) {
     showToast(error.message || "Subscription could not be cancelled.", "error");
