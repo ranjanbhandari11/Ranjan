@@ -110,10 +110,18 @@ app.use((req, res, next) => {
 
   next();
 });
-app.use(express.static(__dirname, {
-  etag: false,
-  lastModified: false
-}));
+const PUBLIC_ASSETS = new Map([
+  ["/", "index.html"],
+  ["/index.html", "index.html"],
+  ["/script.js", "script.js"],
+  ["/styles.css", "styles.css"],
+  ["/logo.svg", "logo.svg"]
+]);
+
+app.get(Array.from(PUBLIC_ASSETS.keys()), (req, res) => {
+  const fileName = PUBLIC_ASSETS.get(req.path) || "index.html";
+  res.sendFile(path.join(__dirname, fileName));
+});
 
 let storageMode = "file";
 let supabase = null;
