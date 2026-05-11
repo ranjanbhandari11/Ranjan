@@ -9,7 +9,7 @@
   },
   "main": "server.js",
   "scripts": {
-    "start": "node render-hotfix.js && node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
