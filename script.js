@@ -127,6 +127,8 @@ const state = {
   recipeReturnScreen: "dashboard",
   lastGuestRecommendationSeed: Date.now(),
   recommendationRefreshCount: 0,
+  recommendationCardLimit: 12,
+  currentRecommendationCards: [],
   authRedirectCompleted: false,
   googleSyncInProgress: false,
   firebaseAuthUnsubscribe: null
@@ -1214,6 +1216,45 @@ async function fetchRecipeVarietyPool(count = 18) {
   return enrichMealDbRecipes(varyRecipes(unique, count).slice(0, count), count);
 }
 
+async function fetchMealDbCategoryPool(category, count = 12, match = 84) {
+  try {
+    const data = await fetchJson(`${THEMEALDB_BASE}/filter.php?c=${encodeURIComponent(category)}`);
+    const meals = uniqueRecipesByName(
+      (data.meals || [])
+        .map((meal, index) => normalizeMealDbMeal(meal, match + (index % 10)))
+        .filter((meal) => meal?.id)
+    );
+    return enrichMealDbRecipes(varyRecipes(meals, category.length).slice(0, count), count);
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function fetchTypedMealPlanPool(totalDays = 7, seeds = []) {
+  const perType = totalDays >= 30 ? 18 : 10;
+  const [breakfast, starter, dessert, seafood, chicken, beef, pasta, random] = await Promise.all([
+    fetchMealDbCategoryPool("Breakfast", perType, 88),
+    fetchMealDbCategoryPool("Starter", perType, 84),
+    fetchMealDbCategoryPool("Dessert", perType, 82),
+    fetchMealDbCategoryPool("Seafood", perType, 86),
+    fetchMealDbCategoryPool("Chicken", perType, 86),
+    fetchMealDbCategoryPool("Beef", Math.max(8, Math.round(perType / 2)), 84),
+    fetchFavoriteIngredientPool(seeds.length ? seeds : ["pasta", "rice", "tomato"], 8).catch(() => []),
+    fetchRecipeVarietyPool(totalDays >= 30 ? 30 : 16).catch(() => [])
+  ]);
+
+  return uniqueRecipesByName([
+    ...breakfast.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "breakfast"] })),
+    ...starter.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "light"] })),
+    ...dessert.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "light", "dessert"] })),
+    ...seafood.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
+    ...chicken.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
+    ...beef.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
+    ...pasta,
+    ...random
+  ]);
+}
+
 async function fetchFavoriteIngredientPool(favorites, perIngredient = 8) {
   if (!favorites?.length) return [];
   const results = await Promise.all(
@@ -1322,7 +1363,8 @@ function getSlotCandidates(label, normalizedPool) {
   const slotType = getSlotType(label);
   const typedPool = normalizedPool.filter((recipe) => getRecipeMealType(recipe) === slotType);
   const fallbackPool = mealSlotFallbackRecipes.filter((recipe) => getRecipeMealType(recipe) === slotType);
-  return [...typedPool, ...fallbackPool];
+  const alternatePool = normalizedPool.filter((recipe) => getRecipeMealType(recipe) !== slotType);
+  return uniqueRecipesByName([...typedPool, ...fallbackPool, ...alternatePool]);
 }
 
 function groupRecipesForSevenDays(pool, totalDays = 7) {
@@ -1369,6 +1411,7 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
   const previousDaySignatures = new Set();
   const previousRecipeByLabel = new Map();
   const globalRecipeUsage = new Map();
+  const globalUsedTitles = new Set();
   const variedPool = varyRecipes(normalizedPool, totalDays + labels.length);
   normalizedPool.splice(0, normalizedPool.length, ...variedPool);
 
@@ -1391,13 +1434,18 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
       const candidateTitle = String(candidate?.title || "").trim();
       if (!candidateTitle) continue;
       if (usedTitles.has(candidateTitle.toLowerCase())) continue;
+      if (globalUsedTitles.has(candidateTitle.toLowerCase()) && rotated.length > labels.length * 2) continue;
       if (previousRecipeByLabel.get(labelIndex) === candidateTitle && rotated.length > 2) continue;
       const overlap = getRecipeIngredientNames(candidate).filter((ingredient) => dayIngredientNames.has(ingredient)).length;
       if (overlap > 1 && rotated.length > 4) continue;
       return candidate;
     }
 
-    return rotated[0]?.recipe || normalizedPool[(dayIndex + labelIndex) % normalizedPool.length] || recipePool[0];
+    const unusedForDay = rotated.find((item) => {
+      const title = String(item.recipe?.title || "").trim().toLowerCase();
+      return title && !usedTitles.has(title);
+    });
+    return unusedForDay?.recipe || normalizedPool[(dayIndex + labelIndex) % normalizedPool.length] || recipePool[0];
   }
 
   const dayCount = Math.max(1, Number(totalDays) || 7);
@@ -1411,6 +1459,7 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
       const recipeTitle = String(recipe?.title || "").trim();
       if (recipeTitle) {
         usedTitles.add(recipeTitle.toLowerCase());
+        globalUsedTitles.add(recipeTitle.toLowerCase());
         previousRecipeByLabel.set(labelIndex, recipeTitle);
         const key = getRecipeIdentity(recipe, labelIndex);
         globalRecipeUsage.set(key, (globalRecipeUsage.get(key) || 0) + 1);
@@ -2298,25 +2347,42 @@ async function renderRecommendationsLegacy() {
 }
 
 function renderRecommendationCards(cards, label = "Recommendation") {
-  const safeCards = uniqueRecipesByName(cards).slice(0, 12);
-  state.currentResults = safeCards;
+  const allCards = uniqueRecipesByName(cards);
+  state.currentRecommendationCards = allCards;
+  const visibleLimit = Math.max(12, Number(state.recommendationCardLimit) || 12);
+  const safeCards = allCards.slice(0, visibleLimit);
+  state.currentResults = allCards;
   refs.recommendationGrid.className = "card-row recommendation-card-grid";
-  refs.recommendationGrid.innerHTML = safeCards.map((recipe) => `
-    <article class="recipe-card">
-      <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
-      <div class="recipe-card-body">
-        <h3>${escapeHtml(recipe.title || recipe.name || "PantryPal Recipe")}</h3>
-        <p>${label === "Personalised" ? `${getRecipeMatchScore(recipe, state.currentUser?.favorites || [])}% match` : label}</p>
-        <button class="primary-button guest-recipe-button" type="button" data-recipe-id="${recipe.id}">View Recipe</button>
+  refs.recommendationGrid.innerHTML = `
+    ${safeCards.map((recipe) => `
+      <article class="recipe-card">
+        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe)}></div>
+        <div class="recipe-card-body">
+          <h3>${escapeHtml(recipe.title || recipe.name || "PantryPal Recipe")}</h3>
+          <p>${label === "Personalised" ? `${getRecipeMatchScore(recipe, state.currentUser?.favorites || [])}% match` : label}</p>
+          <button class="primary-button guest-recipe-button" type="button" data-recipe-id="${recipe.id}">View Recipe</button>
+        </div>
+      </article>
+    `).join("")}
+    ${allCards.length > safeCards.length ? `
+      <div class="recommendation-more-row">
+        <button class="primary-button recommendation-more-button" type="button" data-show-more-recipes>
+          Show more recipes
+        </button>
       </div>
-    </article>
-  `).join("");
+    ` : ""}
+  `;
   attachRecipeCardActions(refs.recommendationGrid);
+  refs.recommendationGrid.querySelector("[data-show-more-recipes]")?.addEventListener("click", () => {
+    state.recommendationCardLimit = visibleLimit + 12;
+    renderRecommendationCards(state.currentRecommendationCards, label);
+  });
 }
 
 async function renderRecommendations() {
   try {
     nextRecommendationCycle();
+    state.recommendationCardLimit = 12;
     refs.recommendationGrid.innerHTML = "";
     if (refs.recommendationPreview) refs.recommendationPreview.innerHTML = "";
     state.currentMealPlan = [];
@@ -2338,14 +2404,14 @@ async function renderRecommendations() {
       try {
         const [favouriteMatches, generalMatches] = await Promise.all([
           guestSeeds.length ? fetchFavoriteIngredientPool(guestSeeds, 8).catch(() => []) : Promise.resolve([]),
-          fetchGuestRecommendations(14).catch(() => [])
+          fetchGuestRecommendations(30).catch(() => [])
         ]);
         const guestResults = uniqueRecipesByName([
           ...favouriteMatches,
           ...generalMatches,
           ...variedGuestFallback
         ]);
-        renderRecommendationCards(varyRecipes(guestResults, 117).slice(0, 12), "Guest recommendation");
+        renderRecommendationCards(varyRecipes(guestResults, 117), "Guest recommendation");
       } catch (_error) {
         renderRecommendationCards(variedGuestFallback, "Guest recommendation");
       }
@@ -2393,13 +2459,15 @@ async function renderRecommendations() {
       renderShoppingList();
 
       try {
-        const [favouriteMatches, varietyMatches] = await Promise.all([
-          fetchFavoriteIngredientPool(seeds, 14).catch(() => []),
-          fetchRecipeVarietyPool(18).catch(() => [])
+        const [favouriteMatches, typedMealMatches, varietyMatches] = await Promise.all([
+          fetchFavoriteIngredientPool(seeds, 16).catch(() => []),
+          fetchTypedMealPlanPool(planningDayCount, seeds).catch(() => []),
+          fetchRecipeVarietyPool(planningDayCount >= 30 ? 40 : 20).catch(() => [])
         ]);
         planPool = uniqueRecipesByName([
           ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 94) })),
           ...favouriteMatches,
+          ...typedMealMatches,
           ...varietyMatches,
           ...planPool
         ]);
@@ -2440,7 +2508,7 @@ async function renderRecommendations() {
     try {
       const [freshByFavorites, variety] = await Promise.all([
         fetchFavoriteIngredientPool(seeds, 10).catch(() => []),
-        fetchRecipeVarietyPool(8).catch(() => [])
+        fetchRecipeVarietyPool(24).catch(() => [])
       ]);
       const liveCards = uniqueRecipesByName([
         ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 93) })),
@@ -2448,7 +2516,7 @@ async function renderRecommendations() {
         ...variety,
         ...variedFallbackCards
       ]);
-      renderRecommendationCards(varyRecipes(liveCards, 223).slice(0, 12), "Personalised");
+      renderRecommendationCards(varyRecipes(liveCards, 223), "Personalised");
     } catch (_error) {
       renderRecommendationCards(variedFallbackCards, "Personalised");
     }

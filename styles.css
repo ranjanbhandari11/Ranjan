@@ -692,6 +692,18 @@ body {
   z-index: 3;
 }
 
+.recommendation-more-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.recommendation-more-button {
+  min-width: 240px;
+  box-shadow: 0 14px 28px rgba(18, 122, 63, 0.22);
+}
+
 .meal-plan-grid {
   display: grid;
   grid-template-columns: 1fr;
