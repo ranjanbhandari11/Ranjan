@@ -126,6 +126,7 @@ const state = {
   activeShoppingCategory: "Vegetables",
   recipeReturnScreen: "dashboard",
   lastGuestRecommendationSeed: Date.now(),
+  recommendationRefreshCount: 0,
   authRedirectCompleted: false,
   googleSyncInProgress: false,
   firebaseAuthUnsubscribe: null
@@ -870,6 +871,45 @@ function uniqueRecipesByName(recipes = []) {
     });
 }
 
+function getRecipeIdentity(recipe, index = 0) {
+  const title = String(recipe?.title || recipe?.name || recipe?.strMeal || "").trim().toLowerCase();
+  return title || String(recipe?.id || recipe?.idMeal || `recipe-${index}`);
+}
+
+function hashRecipeText(text, salt = 0) {
+  const source = String(text || "");
+  let hash = 2166136261 + (Number(salt) || 0);
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0);
+}
+
+function varyRecipes(recipes = [], salt = 0) {
+  const cycle = Number(state.recommendationRefreshCount || 0);
+  return uniqueRecipesByName(recipes)
+    .map((recipe, index) => ({
+      recipe,
+      score: hashRecipeText(`${getRecipeIdentity(recipe, index)}-${cycle}-${salt}`, index + cycle + salt)
+    }))
+    .sort((left, right) => left.score - right.score)
+    .map((item) => item.recipe);
+}
+
+function rotateRecipes(recipes = [], offset = 0) {
+  const list = Array.isArray(recipes) ? recipes.filter(Boolean) : [];
+  if (!list.length) return [];
+  const safeOffset = ((Number(offset) || 0) % list.length + list.length) % list.length;
+  return list.slice(safeOffset).concat(list.slice(0, safeOffset));
+}
+
+function nextRecommendationCycle() {
+  state.recommendationRefreshCount = (state.recommendationRefreshCount || 0) + 1;
+  state.lastGuestRecommendationSeed = Date.now() + state.recommendationRefreshCount;
+  return state.recommendationRefreshCount;
+}
+
 function getRecipeMatchScore(recipe, preferences = []) {
   const preferred = normalizeIngredientList(preferences);
   const baseMatch = Number(recipe?.match || 0);
@@ -1017,6 +1057,7 @@ function resetSession() {
 
 function buildLocalResults(query) {
   const wantedTerms = parseFavoriteInput(query).map((item) => item.toLowerCase());
+  const salt = wantedTerms.join("|").length + (wantedTerms.length * 13);
   const ranked = recipePool
     .map((recipe) => {
       const matches = recipe.ingredients.filter((ingredient) =>
@@ -1031,7 +1072,11 @@ function buildLocalResults(query) {
     })
     .filter((recipe) => wantedTerms.length === 0 || recipe.matchedCount > 0)
     .sort((left, right) => right.matchedCount - left.matchedCount || right.match - left.match);
-  return ranked.length ? ranked.slice(0, 12) : recipePool.slice(0, 6);
+  const source = ranked.length ? ranked : recipePool;
+  const anchorCount = ranked.length ? Math.min(3, source.length) : 0;
+  const anchors = source.slice(0, anchorCount);
+  const variedRest = varyRecipes(source.slice(anchorCount), salt);
+  return [...anchors, ...variedRest].slice(0, ranked.length ? 18 : 12);
 }
 
 function normalizeMealDbMeal(meal, fallbackMatch = 85) {
@@ -1128,33 +1173,45 @@ async function enrichMealDbRecipes(recipes, limit = 8) {
   return enriched;
 }
 
-async function fetchGuestRecommendations() {
-  const requests = Array.from({ length: 6 }, () =>
-    fetchJson(`${THEMEALDB_BASE}/random.php?seed=${state.lastGuestRecommendationSeed}`)
+async function fetchGuestRecommendations(count = 12) {
+  const requestCount = Math.max(count * 2, 16);
+  const seed = `${state.lastGuestRecommendationSeed}-${state.recommendationRefreshCount}-${Math.random()}`;
+  const requests = Array.from({ length: requestCount }, (_, index) =>
+    fetchJson(`${THEMEALDB_BASE}/random.php?cb=${encodeURIComponent(`${seed}-${index}`)}`).catch(() => null)
   );
   const results = await Promise.all(requests);
-  const meals = results
-    .map((result, index) => normalizeMealDbMeal(result.meals?.[0], 80 + (index % 15)))
-    .filter((meal) => meal.id);
-  return enrichMealDbRecipes(meals, meals.length);
+  const meals = uniqueRecipesByName(
+    results
+      .map((result, index) => result?.meals?.[0] ? normalizeMealDbMeal(result.meals[0], 80 + (index % 15)) : null)
+      .filter((meal) => meal?.id)
+  );
+  const enriched = await enrichMealDbRecipes(varyRecipes(meals, requestCount).slice(0, count), count);
+
+  if (enriched.length >= count) return enriched;
+
+  const extras = await fetchRecipeVarietyPool(count - enriched.length + 6).catch(() => []);
+  return uniqueRecipesByName([...enriched, ...extras]).slice(0, count);
 }
 
 async function fetchRecipeVarietyPool(count = 18) {
-  const requests = Array.from({ length: count }, () =>
-    fetchJson(`${THEMEALDB_BASE}/random.php?seed=${Date.now() + Math.random()}`)
+  const requestCount = Math.max(count * 2, count + 10);
+  const requests = Array.from({ length: requestCount }, (_, index) =>
+    fetchJson(`${THEMEALDB_BASE}/random.php?cb=${encodeURIComponent(`${Date.now()}-${state.recommendationRefreshCount}-${index}-${Math.random()}`)}`).catch(() => null)
   );
   const results = await Promise.all(requests);
   const unique = [];
   const seen = new Set();
 
   results.forEach((result, index) => {
-    const meal = normalizeMealDbMeal(result.meals?.[0], 78 + (index % 18));
-    if (!meal?.id || seen.has(meal.id)) return;
-    seen.add(meal.id);
+    if (!result?.meals?.[0]) return;
+    const meal = normalizeMealDbMeal(result.meals[0], 78 + (index % 18));
+    const key = getRecipeIdentity(meal, index);
+    if (!meal?.id || seen.has(key)) return;
+    seen.add(key);
     unique.push(meal);
   });
 
-  return enrichMealDbRecipes(unique, unique.length);
+  return enrichMealDbRecipes(varyRecipes(unique, count).slice(0, count), count);
 }
 
 async function fetchFavoriteIngredientPool(favorites, perIngredient = 8) {
@@ -1281,8 +1338,12 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
   [
     ...sourcePool,
     ...buildLocalResults("Eggs, Oats, Fruit, Yoghurt"),
+    ...buildLocalResults("Pancakes, Toast, Smoothie, Banana"),
+    ...buildLocalResults("Tea, Muffin, Fruit, Sandwich"),
     ...buildLocalResults("Chicken, Salad, Rice, Tomato"),
+    ...buildLocalResults("Beef, Fish, Pasta, Vegetables"),
     ...buildLocalResults("Pasta, Soup, Potato, Salmon"),
+    ...buildLocalResults("Dessert, Pudding, Cake, Berries"),
     ...mealSlotFallbackRecipes,
     ...recipePool
   ].forEach((recipe) => {
@@ -1307,26 +1368,32 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
 
   const previousDaySignatures = new Set();
   const previousRecipeByLabel = new Map();
+  const globalRecipeUsage = new Map();
+  const variedPool = varyRecipes(normalizedPool, totalDays + labels.length);
+  normalizedPool.splice(0, normalizedPool.length, ...variedPool);
 
   function selectRecipeForSlot(label, dayIndex, labelIndex, usedTitles, dayIngredientNames) {
-    const candidates = getSlotCandidates(label, normalizedPool);
+    const slotSalt = (dayIndex + 1) * 31 + (labelIndex + 1) * 17 + state.recommendationRefreshCount;
+    const candidates = rotateRecipes(varyRecipes(getSlotCandidates(label, normalizedPool), slotSalt), slotSalt);
     const ranked = candidates
       .map((recipe, index) => ({
         recipe,
         index,
         score: scoreRecipeForSlot(recipe, label, dayIngredientNames)
+          - ((globalRecipeUsage.get(getRecipeIdentity(recipe, index)) || 0) * 60)
+          + ((slotSalt + index) % 9)
       }))
-      .sort((left, right) => right.score - left.score || ((dayIndex + labelIndex + left.index) % 7) - ((dayIndex + labelIndex + right.index) % 7));
+      .sort((left, right) => right.score - left.score || left.index - right.index);
 
-    const rotated = ranked.slice((dayIndex + labelIndex) % Math.max(1, ranked.length)).concat(ranked.slice(0, (dayIndex + labelIndex) % Math.max(1, ranked.length)));
+    const rotated = rotateRecipes(ranked, slotSalt);
     for (const item of rotated) {
       const candidate = item.recipe;
       const candidateTitle = String(candidate?.title || "").trim();
       if (!candidateTitle) continue;
       if (usedTitles.has(candidateTitle.toLowerCase())) continue;
-      if (previousRecipeByLabel.get(labelIndex) === candidateTitle && rotated.length > 1) continue;
+      if (previousRecipeByLabel.get(labelIndex) === candidateTitle && rotated.length > 2) continue;
       const overlap = getRecipeIngredientNames(candidate).filter((ingredient) => dayIngredientNames.has(ingredient)).length;
-      if (overlap > 0 && rotated.length > 3) continue;
+      if (overlap > 1 && rotated.length > 4) continue;
       return candidate;
     }
 
@@ -1345,6 +1412,8 @@ function groupRecipesForSevenDays(pool, totalDays = 7) {
       if (recipeTitle) {
         usedTitles.add(recipeTitle.toLowerCase());
         previousRecipeByLabel.set(labelIndex, recipeTitle);
+        const key = getRecipeIdentity(recipe, labelIndex);
+        globalRecipeUsage.set(key, (globalRecipeUsage.get(key) || 0) + 1);
       }
       getRecipeIngredientNames(recipe).forEach((ingredient) => dayIngredientNames.add(ingredient));
       meals.push({ label, recipe });
@@ -2247,6 +2316,7 @@ function renderRecommendationCards(cards, label = "Recommendation") {
 
 async function renderRecommendations() {
   try {
+    nextRecommendationCycle();
     refs.recommendationGrid.innerHTML = "";
     if (refs.recommendationPreview) refs.recommendationPreview.innerHTML = "";
     state.currentMealPlan = [];
@@ -2261,22 +2331,23 @@ async function renderRecommendations() {
       const guestFallback = uniqueRecipesByName([
         ...buildLocalResults(guestSeedText || "Chicken, Rice, Tomato, Pasta, Eggs"),
         ...recipePool
-      ]).slice(0, 12);
-      renderRecommendationCards(guestFallback, "Guest recommendation");
+      ]);
+      const variedGuestFallback = varyRecipes(guestFallback, 101).slice(0, 12);
+      renderRecommendationCards(variedGuestFallback, "Guest recommendation");
 
       try {
         const [favouriteMatches, generalMatches] = await Promise.all([
           guestSeeds.length ? fetchFavoriteIngredientPool(guestSeeds, 8).catch(() => []) : Promise.resolve([]),
-          fetchGuestRecommendations().catch(() => [])
+          fetchGuestRecommendations(14).catch(() => [])
         ]);
         const guestResults = uniqueRecipesByName([
           ...favouriteMatches,
           ...generalMatches,
-          ...guestFallback
-        ]).slice(0, 12);
-        renderRecommendationCards(guestResults.length ? guestResults : guestFallback, "Guest recommendation");
+          ...variedGuestFallback
+        ]);
+        renderRecommendationCards(varyRecipes(guestResults, 117).slice(0, 12), "Guest recommendation");
       } catch (_error) {
-        renderRecommendationCards(guestFallback, "Guest recommendation");
+        renderRecommendationCards(variedGuestFallback, "Guest recommendation");
       }
       renderShoppingList();
       return;
@@ -2310,6 +2381,7 @@ async function renderRecommendations() {
         ...recipePool,
         ...mealSlotFallbackRecipes
       ]);
+      planPool = varyRecipes(planPool, planningDayCount);
 
       state.currentMealPlan = groupRecipesForSevenDays(planPool, planningDayCount);
       state.currentPlanDayIndex = 0;
@@ -2331,6 +2403,7 @@ async function renderRecommendations() {
           ...varietyMatches,
           ...planPool
         ]);
+        planPool = varyRecipes(planPool, planningDayCount + 47);
         state.currentMealPlan = groupRecipesForSevenDays(planPool, planningDayCount);
         state.currentPlanDayIndex = 0;
         state.activePlanWeekIndex = 0;
@@ -2349,7 +2422,8 @@ async function renderRecommendations() {
       ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 93) })),
       ...buildLocalResults(seedText),
       ...recipePool
-    ]).slice(0, 12);
+    ]);
+    const variedFallbackCards = varyRecipes(fallbackCards, 211).slice(0, 12);
 
     refs.recommendationHeading.textContent = "Personal Recipe Recommendations";
     refs.dashboardNote.textContent = savedIngredients.length || savedRecipes.length
@@ -2361,7 +2435,7 @@ async function renderRecommendations() {
         : "Free logged-in users can still browse personalised recipe recommendations.";
     }
 
-    renderRecommendationCards(fallbackCards, "Personalised");
+    renderRecommendationCards(variedFallbackCards, "Personalised");
 
     try {
       const [freshByFavorites, variety] = await Promise.all([
@@ -2372,11 +2446,11 @@ async function renderRecommendations() {
         ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 93) })),
         ...freshByFavorites,
         ...variety,
-        ...fallbackCards
-      ]).slice(0, 12);
-      renderRecommendationCards(liveCards, "Personalised");
+        ...variedFallbackCards
+      ]);
+      renderRecommendationCards(varyRecipes(liveCards, 223).slice(0, 12), "Personalised");
     } catch (_error) {
-      renderRecommendationCards(fallbackCards, "Personalised");
+      renderRecommendationCards(variedFallbackCards, "Personalised");
     }
 
     renderShoppingList();
@@ -3037,7 +3111,7 @@ function bindStaticEvents() {
     }
   });
   refs.guestRefresh.addEventListener("click", async () => {
-    state.lastGuestRecommendationSeed = Date.now();
+    nextRecommendationCycle();
     await renderRecommendations();
   });
   refs.sessionAction.addEventListener("click", () => {
