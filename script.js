@@ -121,6 +121,7 @@ const state = {
   currentRecipe: null,
   currentMealPlan: [],
   currentPlanDayIndex: 0,
+  activePlanWeekIndex: 0,
   activeShoppingWeekIndex: 0,
   activeShoppingCategory: "Vegetables",
   recipeReturnScreen: "dashboard",
@@ -943,6 +944,7 @@ function resetSession() {
   state.currentRecipe = null;
   state.currentMealPlan = [];
   state.currentPlanDayIndex = 0;
+  state.activePlanWeekIndex = 0;
   state.activeShoppingWeekIndex = 0;
   state.activeShoppingCategory = "Vegetables";
   refs.loginForm.reset();
@@ -1701,18 +1703,30 @@ function renderWeeklySlider(plan) {
   }
 
   const weekGroups = getPlanningWeekGroups(plan);
+  if (state.activePlanWeekIndex >= weekGroups.length) state.activePlanWeekIndex = 0;
+  const activeWeek = weekGroups[state.activePlanWeekIndex] || weekGroups[0];
   refs.recommendationGrid.className = weekGroups.length > 1
     ? "meal-plan-grid weekly-card-grid month-plan-grid"
     : "meal-plan-grid weekly-card-grid";
 
-  refs.recommendationGrid.innerHTML = weekGroups.map((week) => `
+  refs.recommendationGrid.innerHTML = `
     <section class="month-week-section">
+      ${weekGroups.length > 1 ? `
+        <div class="plan-week-tabs" aria-label="Choose recommendation week">
+          ${weekGroups.map((week) => `
+            <button class="shopping-tab plan-week-tab ${week.index === state.activePlanWeekIndex ? "is-active" : ""}" type="button" data-plan-week="${week.index}">
+              ${week.label}
+              <span>${week.range}</span>
+            </button>
+          `).join("")}
+        </div>
+      ` : ""}
       <div class="month-week-heading">
-        <p class="eyebrow">${week.label}</p>
-        <h3>${week.range}</h3>
+        <p class="eyebrow">${activeWeek.label}</p>
+        <h3>${activeWeek.range}</h3>
       </div>
       <div class="week-days-grid">
-        ${week.days.map((dayPlan) => `
+        ${activeWeek.days.map((dayPlan) => `
           <article class="day-plan-card week-plan-card">
             <h4>Day ${dayPlan.day}</h4>
             <div class="meal-slot-list">
@@ -1722,7 +1736,17 @@ function renderWeeklySlider(plan) {
         `).join("")}
       </div>
     </section>
-  `).join("");
+  `;
+
+  refs.recommendationGrid.querySelectorAll("[data-plan-week]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activePlanWeekIndex = Number(button.dataset.planWeek) || 0;
+      state.activeShoppingWeekIndex = state.activePlanWeekIndex;
+      renderWeeklySlider(plan);
+      attachPlanRecipeActions();
+      renderShoppingList();
+    });
+  });
 }
 
 function renderRecipeDetail(recipe) {
@@ -2089,6 +2113,7 @@ async function renderRecommendationsLegacy() {
   }
   state.currentMealPlan = groupRecipesForSevenDays(pool, planningDayCount);
   state.currentPlanDayIndex = 0;
+  state.activePlanWeekIndex = 0;
   state.activeShoppingWeekIndex = 0;
   state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
   renderWeeklySlider(state.currentMealPlan);
@@ -2124,6 +2149,7 @@ async function renderRecommendationsLegacy() {
 
   state.currentMealPlan = groupRecipesForSevenDays(pool, planningDayCount);
   state.currentPlanDayIndex = 0;
+  state.activePlanWeekIndex = 0;
   state.activeShoppingWeekIndex = 0;
   state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
   if (refs.recommendationPreview) {

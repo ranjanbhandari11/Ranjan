@@ -6475,9 +6475,47 @@ button:disabled,
   opacity: 0.74;
 }
 
+.plan-week-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.plan-week-tab {
+  min-width: 132px;
+  text-align: left;
+}
+
+#recommendations .month-plan-grid {
+  width: min(100%, 1320px);
+  max-width: 1320px;
+}
+
+#recommendations .month-week-section {
+  padding: clamp(22px, 3vw, 36px);
+}
+
+#recommendations .week-days-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#recommendations .meal-slot-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#recommendations .meal-slot-card {
+  min-height: 118px;
+}
+
 @media (max-width: 1100px) {
   .week-days-grid {
     grid-template-columns: repeat(2, minmax(240px, 1fr));
+  }
+
+  #recommendations .week-days-grid,
+  #recommendations .meal-slot-list {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6488,5 +6526,146 @@ button:disabled,
 
   .month-week-heading {
     display: grid;
+  }
+}
+
+/* Final subscribed-plan guardrail: Render was still compressing 30-day plan cards. */
+#recommendations .meal-plan-grid.weekly-card-grid,
+#recommendations .meal-plan-grid.weekly-card-grid.month-plan-grid {
+  display: block !important;
+  width: min(100%, 1240px) !important;
+  max-width: 1240px !important;
+  margin: 0 auto !important;
+}
+
+#recommendations .month-week-section {
+  width: 100% !important;
+  max-width: 1240px !important;
+  margin: 0 auto !important;
+  padding: clamp(24px, 3.2vw, 42px) !important;
+  overflow: visible !important;
+}
+
+#recommendations .week-days-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 24px !important;
+  width: 100% !important;
+}
+
+#recommendations .week-plan-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  overflow: visible !important;
+  padding: clamp(22px, 2.5vw, 34px) !important;
+  border-radius: 30px !important;
+}
+
+#recommendations .week-plan-card h4 {
+  margin: 0 0 18px !important;
+  color: #101a12 !important;
+}
+
+#recommendations .meal-slot-list {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(220px, 1fr)) !important;
+  gap: 16px !important;
+  width: 100% !important;
+}
+
+#recommendations .meal-slot,
+#recommendations .meal-slot-card {
+  display: grid !important;
+  grid-template-columns: 104px minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 132px !important;
+  max-width: none !important;
+  padding: 14px !important;
+  overflow: hidden !important;
+  text-align: left !important;
+}
+
+#recommendations .meal-slot-photo {
+  width: 104px !important;
+  height: 104px !important;
+  min-width: 104px !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+#recommendations .meal-slot-photo img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+#recommendations .meal-slot-copy {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #172018 !important;
+}
+
+#recommendations .meal-slot-copy strong,
+#recommendations .meal-slot-copy span {
+  display: block !important;
+  max-width: 100% !important;
+  color: inherit !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
+
+#recommendations .meal-slot-copy strong {
+  margin-bottom: 6px !important;
+  color: #2f7c3f !important;
+  font-size: 0.82rem !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+}
+
+#recommendations .meal-slot-copy span:nth-child(2) {
+  margin-bottom: 6px !important;
+  color: #101a12 !important;
+  font-size: 1.02rem !important;
+  font-weight: 850 !important;
+  line-height: 1.24 !important;
+}
+
+#recommendations .meal-slot-copy span:nth-child(3) {
+  color: #526455 !important;
+  font-size: 0.92rem !important;
+  line-height: 1.35 !important;
+}
+
+@media (max-width: 980px) {
+  #recommendations .meal-slot-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 680px) {
+  #recommendations .month-week-section {
+    padding: 18px !important;
+    border-radius: 24px !important;
+  }
+
+  #recommendations .meal-slot-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  #recommendations .meal-slot,
+  #recommendations .meal-slot-card {
+    grid-template-columns: 88px minmax(0, 1fr) !important;
+    min-height: 112px !important;
+  }
+
+  #recommendations .meal-slot-photo {
+    width: 88px !important;
+    height: 88px !important;
+    min-width: 88px !important;
   }
 }
