@@ -142,7 +142,13 @@ const thumbImageUrls = {
   "thumb-noodles": "https://images.unsplash.com/photo-1617093727343-374698b1b08d?auto=format&fit=crop&w=1400&q=80",
   "thumb-pasta": "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?auto=format&fit=crop&w=1200&q=80",
   "thumb-salad": "https://images.unsplash.com/photo-1546793665-c74683f339c1?auto=format&fit=crop&w=1200&q=80",
-  "thumb-soup": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=1200&q=80"
+  "thumb-soup": "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=1200&q=80",
+  "thumb-breakfast": "https://images.unsplash.com/photo-1493770348161-369560ae357d?auto=format&fit=crop&w=1200&q=80",
+  "thumb-toast": "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=1200&q=80",
+  "thumb-dessert": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=1200&q=80",
+  "thumb-curry": "https://images.unsplash.com/photo-1631292784640-2b24be784d5d?auto=format&fit=crop&w=1200&q=80",
+  "thumb-seafood": "https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1200&q=80",
+  "thumb-bowl": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80"
 };
 
 const recipeImageOverrides = {
@@ -419,7 +425,22 @@ const recipePool = [
   }
 ];
 
-const imageClasses = ["thumb-green", "thumb-red", "thumb-fresh", "thumb-pasta", "thumb-salad", "thumb-soup", "thumb-gold", "thumb-noodles"];
+const imageClasses = [
+  "thumb-green",
+  "thumb-red",
+  "thumb-fresh",
+  "thumb-pasta",
+  "thumb-salad",
+  "thumb-soup",
+  "thumb-gold",
+  "thumb-noodles",
+  "thumb-breakfast",
+  "thumb-toast",
+  "thumb-dessert",
+  "thumb-curry",
+  "thumb-seafood",
+  "thumb-bowl"
+];
 
 const mealSlotFallbackRecipes = [
   {
@@ -702,6 +723,9 @@ function getThumbClass(recipe) {
 }
 
 function getRecipeImageUrl(recipe, variant = 0) {
+  if (recipe?.displayImageUrl) {
+    return String(recipe.displayImageUrl);
+  }
   if (recipe?.imageUrl) {
     return String(recipe.imageUrl);
   }
@@ -722,6 +746,37 @@ function getRecipeImageUrl(recipe, variant = 0) {
   const fallbackClasses = Object.keys(thumbImageUrls);
   const seed = hashRecipeText(`${recipe?.id || ""}|${recipe?.title || ""}|${recipe?.category || ""}`, variant);
   return thumbImageUrls[fallbackClasses[seed % fallbackClasses.length]] || thumbImageUrls["thumb-green"];
+}
+
+function getVariedFallbackImageUrl(recipe, variant = 0) {
+  const fallbackClasses = Object.keys(thumbImageUrls);
+  const source = `${recipe?.id || ""}|${recipe?.title || recipe?.name || ""}|${recipe?.category || ""}|${variant}`;
+  const seed = hashRecipeText(source, variant);
+  return thumbImageUrls[fallbackClasses[seed % fallbackClasses.length]] || thumbImageUrls["thumb-green"];
+}
+
+function withUniqueDisplayImages(recipes = [], offset = 0) {
+  const usedImages = new Set();
+  return (Array.isArray(recipes) ? recipes : []).map((recipe, index) => {
+    const variant = Number(offset || 0) + index;
+    let imageUrl = getRecipeImageUrl({ ...recipe, displayImageUrl: "" }, variant);
+    const imageKey = String(imageUrl || "").split("?")[0].toLowerCase();
+
+    if (!imageKey || usedImages.has(imageKey)) {
+      imageUrl = getVariedFallbackImageUrl(recipe, variant + usedImages.size + 11);
+    }
+
+    let uniqueKey = String(imageUrl || "").split("?")[0].toLowerCase();
+    let guard = 0;
+    while (uniqueKey && usedImages.has(uniqueKey) && guard < imageClasses.length) {
+      imageUrl = getVariedFallbackImageUrl(recipe, variant + guard + 23);
+      uniqueKey = String(imageUrl || "").split("?")[0].toLowerCase();
+      guard += 1;
+    }
+
+    if (uniqueKey) usedImages.add(uniqueKey);
+    return { ...recipe, displayImageUrl: imageUrl };
+  });
 }
 
 function getThumbStyle(recipe, variant = 0) {
@@ -1601,150 +1656,6 @@ function summarizeMeasures(measures) {
   return [...summarized, ...text].join(", ") || "As needed";
 }
 
-function renderShoppingListLegacy() {
-  if (!state.isGuestSession && state.currentUser && !hasPremiumPlanningAccess()) {
-    if (refs.shoppingCategories) refs.shoppingCategories.innerHTML = "";
-    if (refs.shoppingListContent) {
-      refs.shoppingListContent.innerHTML = `
-        <section class="premium-lock-card shopping-list-locked">
-          <p class="eyebrow">Premium planning</p>
-          <h2>Subscribe to unlock the weekly shopping list.</h2>
-          <p>Recipe recommendations stay available on free accounts. Shopping lists are generated from the subscribed 7-day plan.</p>
-          <button type="button" class="btn primary" data-screen="pricing">View Plans</button>
-        </section>`;
-    }
-    return;
-  }
-  if (!hasPremiumPlanningAccess()) {
-    refs.shoppingTabs.innerHTML = '<span class="shopping-tab is-active">Premium access</span>';
-    refs.shoppingGrid.innerHTML = `
-      <section class="shopping-card premium-lock-card">
-        <h3>Weekly shopping list is for subscribers</h3>
-        <p>Active 7-day and 30-day subscribers get the categorized weekly shopping list generated from the meal plan.</p>
-        <button class="primary-button" type="button" data-screen-target="pricing">View Subscription Plans</button>
-      </section>
-    `;
-    refs.shoppingGrid.querySelector("[data-screen-target='pricing']")?.addEventListener("click", () => activateScreen("pricing"));
-    return;
-  }
-
-  if (!state.currentMealPlan?.length) {
-    const sourceFavorites = state.currentUser?.favorites?.length
-      ? state.currentUser.favorites
-      : ["Chicken", "Rice", "Tomato", "Spinach"];
-    state.currentMealPlan = groupRecipesForSevenDays(buildLocalResults(sourceFavorites.join(", ")));
-  }
-
-  const aggregated = new Map();
-  const preferredCategories = [
-    "Dairy",
-    "Protein",
-    "Frozen",
-    "Vegetables",
-    "Dry Items",
-    "Pantry",
-    "Sauces",
-    "Desserts",
-    "Fruit",
-    "Other"
-  ];
-
-  state.currentMealPlan.forEach((dayPlan) => {
-    dayPlan.meals.forEach((meal) => {
-      const details = meal.recipe.ingredientDetails?.length
-        ? meal.recipe.ingredientDetails
-        : (meal.recipe.ingredients || []).map((ingredient) => {
-            const match = String(ingredient).match(/^(.+?)\s+([A-Za-z].*)$/);
-            if (match) {
-              return normalizeIngredientMeasure(match[2], match[1]);
-            }
-            return normalizeIngredientMeasure(ingredient, "As needed");
-          });
-
-      details.slice(0, 6).forEach((item) => {
-        const normalized = normalizeIngredientMeasure(item.name, item.measure);
-        const key = canonicalIngredientName(normalized.name) || normalized.name.toLowerCase();
-        if (!aggregated.has(key)) {
-          aggregated.set(key, {
-            name: normalized.name,
-            amounts: [],
-            category: categorizeIngredient(normalized.name)
-          });
-        }
-        aggregated.get(key).amounts.push(normalized.measure);
-      });
-    });
-  });
-
-  const allItems = [...aggregated.values()].sort((left, right) => left.name.localeCompare(right.name));
-  const presentCategories = new Set(allItems.map((item) => item.category));
-  const categories = preferredCategories.filter((category) => presentCategories.has(category));
-
-  refs.shoppingTabs.innerHTML = categories.length
-    ? categories
-        .map((category) => `
-          <span class="shopping-tab is-active">${category}</span>
-        `)
-        .join("")
-    : '<span class="shopping-tab is-active">No categories yet</span>';
-
-  const shoppingSections = categories
-    .map((category) => {
-      const categoryItems = allItems
-        .filter((item) => item.category === category)
-        .map((item) => `
-          <div class="shopping-item">
-            <strong>${item.name}</strong>
-            <span>${summarizeMeasures(item.amounts)}</span>
-          </div>
-        `)
-        .join("");
-
-      return `
-        <section class="shopping-card">
-          <h3>${category}</h3>
-          <div class="shopping-list">${categoryItems || "<p>No items in this category.</p>"}</div>
-        </section>
-      `;
-    })
-    .join("");
-
-  const weeklyDays = state.currentMealPlan
-    .map((dayPlan) => `
-      <div class="weekly-plan-day">
-        <h4>Day ${dayPlan.day}</h4>
-        <ul class="shopping-day-meals">
-          ${dayPlan.meals.map((meal) => `<li><strong>${meal.label}</strong><span>${meal.recipe.title}</span></li>`).join("")}
-        </ul>
-      </div>
-    `)
-    .join("");
-
-  refs.shoppingGrid.innerHTML = `
-    <section class="shopping-card">
-      <h3>Category Breakdown</h3>
-      <div class="shopping-week-grid">
-        ${shoppingSections || "<p>No shopping items available.</p>"}
-      </div>
-    </section>
-    <section class="shopping-card">
-      <h3>7 Day Breakdown</h3>
-      <div class="weekly-plan-mini shopping-day-list">${weeklyDays || "<p>No weekly plan available.</p>"}</div>
-    </section>
-    <section class="shopping-card">
-      <h3>All Week Items</h3>
-      <div class="shopping-list">
-        ${allItems.map((item) => `
-          <div class="shopping-item">
-            <strong>${item.name}</strong>
-            <span>${item.category} • ${summarizeMeasures(item.amounts)}</span>
-          </div>
-        `).join("")}
-      </div>
-    </section>
-  `;
-}
-
 function renderShoppingList() {
   if (!state.isGuestSession && state.currentUser && !hasPremiumPlanningAccess()) {
     if (refs.shoppingCategories) refs.shoppingCategories.innerHTML = "";
@@ -1957,7 +1868,14 @@ function renderWeeklySlider(plan) {
     return;
   }
 
-  const weekGroups = getPlanningWeekGroups(plan);
+  const displayPlan = plan.map((dayPlan, dayIndex) => ({
+    ...dayPlan,
+    meals: dayPlan.meals.map((meal, mealIndex) => ({
+      ...meal,
+      recipe: withUniqueDisplayImages([meal.recipe], (dayIndex * 17) + mealIndex)[0]
+    }))
+  }));
+  const weekGroups = getPlanningWeekGroups(displayPlan);
   if (state.activePlanWeekIndex >= weekGroups.length) state.activePlanWeekIndex = 0;
   const activeWeek = weekGroups[state.activePlanWeekIndex] || weekGroups[0];
   refs.recommendationGrid.className = weekGroups.length > 1
@@ -2090,12 +2008,13 @@ function attachRecipeCardActions(scope) {
 }
 
 function renderResults(recipes, label) {
-  state.currentResults = recipes;
+  const displayRecipes = withUniqueDisplayImages(recipes, 31);
+  state.currentResults = displayRecipes;
   refs.resultsTitle.textContent = `Results for ${label}`;
   refs.resultsNote.textContent = `Showing recipe matches for ${label}.`;
   setResultsError("");
 
-  refs.resultsGrid.innerHTML = recipes
+  refs.resultsGrid.innerHTML = displayRecipes
     .map((recipe, index) => `
       <article class="result-card">
         <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}>
@@ -2182,6 +2101,7 @@ async function renderFreeAccountRecommendations() {
   }
 
   state.currentMealPlan = [];
+  cards = withUniqueDisplayImages(cards, 61);
   state.currentResults = cards;
   refs.recommendationHeading.textContent = "Personal Recipe Recommendations";
   refs.dashboardNote.textContent = savedIngredients.length || savedRecipes.length
@@ -2212,11 +2132,11 @@ function renderRecommendationFallbackCards(error = null) {
     ...(state.currentUser?.favoriteIngredients || [])
   ]);
   const query = favorites.length ? favorites.join(", ") : "Chicken, Rice, Tomato, Spinach";
-  const cards = uniqueRecipesByName([
+  const cards = withUniqueDisplayImages(uniqueRecipesByName([
     ...(state.currentUser?.savedRecipes || []),
     ...buildLocalResults(query),
     ...recipePool
-  ]).slice(0, 12);
+  ]).slice(0, 12), 73);
 
   state.currentMealPlan = [];
   state.currentResults = cards;
@@ -2243,185 +2163,8 @@ function renderRecommendationFallbackCards(error = null) {
   attachRecipeCardActions(refs.recommendationGrid);
 }
 
-async function renderRecommendationsLegacy() {
-  try {
-    if (!state.isGuestSession && state.currentUser && !hasPremiumPlanningAccess()) {
-      await renderFreeAccountRecommendations();
-      return;
-    }
-    refs.recommendationGrid.innerHTML = "";
-    if (refs.recommendationPreview) {
-      refs.recommendationPreview.innerHTML = "";
-    }
-
-    if (state.isGuestSession) {
-    state.currentMealPlan = [];
-    refs.recommendationHeading.textContent = "Guest Recipe Recommendations";
-    refs.dashboardNote.textContent = "These guest recommendations are shaped by the favourite ingredients you entered for this session, plus a rotating mix of broader recipe ideas.";
-    const guestFallback = buildLocalResults((state.currentUser?.favorites || []).join(", ") || "Chicken, Rice, Tomato");
-    let guestResults = guestFallback;
-    state.currentResults = guestResults;
-    refs.recommendationGrid.className = "card-row";
-    refs.recommendationGrid.innerHTML = guestResults.map((recipe, index) => `
-      <article class="recipe-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
-        <div class="recipe-card-body">
-          <h3>${recipe.title}</h3>
-          <p>Guest recommendation</p>
-          <button class="primary-button guest-recipe-button" type="button" data-recipe-id="${recipe.id}">View Recipe</button>
-        </div>
-      </article>
-    `).join("");
-    attachRecipeCardActions(refs.recommendationGrid);
-
-    try {
-      guestResults = await fetchGuestRecommendations();
-    } catch (_error) {
-      guestResults = guestFallback;
-    }
-
-    state.currentResults = guestResults;
-    if (refs.recommendationPreview) {
-      refs.recommendationPreview.innerHTML = "";
-    }
-
-    refs.recommendationGrid.className = "card-row";
-    refs.recommendationGrid.innerHTML = guestResults.map((recipe, index) => `
-      <article class="recipe-card">
-        <div class="thumb ${getThumbClass(recipe)}" ${getThumbStyle(recipe, index)}></div>
-        <div class="recipe-card-body">
-          <h3>${recipe.title}</h3>
-          <p>Guest recommendation</p>
-          <button class="primary-button guest-recipe-button" type="button" data-recipe-id="${recipe.id}">View Recipe</button>
-        </div>
-      </article>
-    `).join("");
-
-    attachRecipeCardActions(refs.recommendationGrid);
-    renderShoppingList();
-      return;
-    }
-
-  if (!state.isGuestSession && state.currentUser && !hasPremiumPlanningAccess()) {
-    const favorites = normalizeIngredientList(state.currentUser.favoriteIngredients || []);
-    const favoriteRecipes = getUserFavoriteRecipes();
-    const seeds = favorites.length ? favorites : ["chicken", "rice", "tomato", "spinach", "egg", "pasta"];
-    const savedNames = favoriteRecipes.map((recipe) => recipe.title || recipe.name).filter(Boolean);
-    const selected = uniqueRecipesByName([
-      ...recipePool.filter((recipe) => {
-        const ingredients = getRecipeIngredientNames(recipe).map((item) => normalizeIngredientKey(item));
-        const title = normalizeIngredientKey(recipe.title || recipe.name || "");
-        return seeds.some((seed) => ingredients.includes(normalizeIngredientKey(seed)) || title.includes(normalizeIngredientKey(seed)));
-      }),
-      ...recipePool.filter((recipe) => savedNames.some((name) => normalizeIngredientKey(recipe.title || recipe.name || "").includes(normalizeIngredientKey(name).split(" ")[0]))),
-      ...recipePool
-    ]).slice(0, 9);
-
-    state.currentMealPlan = [];
-    refs.recommendationHeading.textContent = "Personal Recipe Recommendations";
-    refs.recommendationNote.textContent = "Free accounts get personalised recipe ideas from saved ingredients and favourite meals. Subscribe to unlock the full 7-day plan and weekly shopping list.";
-    refs.planTrack.innerHTML = selected.map((recipe) => `
-      <article class="recipe-card">
-        <img src="${getRecipeImageUrl(recipe)}" alt="${escapeHtml(recipe.title || recipe.name)}">
-        <div class="recipe-card-body">
-          <span class="match-pill">${getRecipeMatchScore(recipe, seeds)}% match</span>
-          <h3>${escapeHtml(recipe.title || recipe.name)}</h3>
-          <p>${escapeHtml((recipe.description || "Saved around your PantryPal preferences.").slice(0, 120))}</p>
-          <button type="button" class="btn primary" data-view-recipe="${recipe.id}">View Recipe</button>
-        </div>
-      </article>`
-    ).join("");
-    renderShoppingList();
-    fetchFavoriteIngredientPool(favorites, 9).then((fresh) => {
-      if (!fresh.length || !refs.recommendationScreen.classList.contains("active")) return;
-      refs.planTrack.innerHTML = uniqueRecipesByName([...fresh, ...selected]).slice(0, 9).map((recipe) => `
-        <article class="recipe-card">
-          <img src="${getRecipeImageUrl(recipe)}" alt="${escapeHtml(recipe.title || recipe.name)}">
-          <div class="recipe-card-body">
-            <span class="match-pill">${getRecipeMatchScore(recipe, seeds)}% match</span>
-            <h3>${escapeHtml(recipe.title || recipe.name)}</h3>
-            <p>${escapeHtml((recipe.description || "Saved around your PantryPal preferences.").slice(0, 120))}</p>
-            <button type="button" class="btn primary" data-view-recipe="${recipe.id}">View Recipe</button>
-          </div>
-        </article>`
-      ).join("");
-    }).catch(() => {});
-    return;
-  }
-
-  const planningDayCount = getPlanningDayCount();
-  refs.recommendationHeading.textContent = planningDayCount === 30
-    ? "Your 30 Day Recommendation Plan"
-    : "Your 7 Day Recommendation Plan";
-  const favorites = state.currentUser?.favorites?.length ? state.currentUser.favorites : ["Chicken", "Rice", "Tomato"];
-  refs.dashboardNote.textContent = planningDayCount === 30
-    ? `Built from your saved ingredients (${favorites.join(", ")}) and favourite recipes, divided into Week 1 to Week 5 so each shopping list stays manageable.`
-    : `Built from your saved ingredients (${favorites.join(", ")}) and favourite recipes so the week stays practical, varied, and easier to shop for.`;
-
-  let pool = buildLocalResults(favorites.join(", "));
-  if (state.currentUser?.savedRecipes?.length) {
-    const savedTitles = new Set(state.currentUser.savedRecipes.map((recipe) => String(recipe.title || "").toLowerCase()));
-    pool = [
-      ...state.currentUser.savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 92) })),
-      ...pool.filter((recipe) => !savedTitles.has(String(recipe.title || "").toLowerCase()))
-    ];
-  }
-  state.currentMealPlan = groupRecipesForSevenDays(pool, planningDayCount);
-  state.currentPlanDayIndex = 0;
-  state.activePlanWeekIndex = 0;
-  state.activeShoppingWeekIndex = 0;
-  state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
-  renderWeeklySlider(state.currentMealPlan);
-  attachPlanRecipeActions();
-  renderShoppingList();
-
-  try {
-    pool = await fetchFavoriteIngredientPool(favorites, 10);
-  } catch (_error) {
-    pool = state.currentResults;
-  }
-
-  try {
-    const varietyPool = await fetchRecipeVarietyPool(18);
-    const seenTitles = new Set(pool.map((recipe) => String(recipe.title || "").toLowerCase()));
-    varietyPool.forEach((recipe) => {
-      const key = String(recipe.title || "").toLowerCase();
-      if (!key || seenTitles.has(key)) return;
-      seenTitles.add(key);
-      pool.push(recipe);
-    });
-  } catch (_error) {
-    // Keep the existing pool if MealDB random variety requests fail.
-  }
-
-  if (state.currentUser?.savedRecipes?.length) {
-    const savedRecipeTitles = new Set(state.currentUser.savedRecipes.map((recipe) => recipe.title));
-    const boostedSaved = state.currentUser.savedRecipes
-      .filter((recipe) => !savedRecipeTitles.has(recipe.title) || true)
-      .map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 92) }));
-    pool = [...boostedSaved, ...pool.filter((recipe) => !savedRecipeTitles.has(recipe.title))];
-  }
-
-  state.currentMealPlan = groupRecipesForSevenDays(pool, planningDayCount);
-  state.currentPlanDayIndex = 0;
-  state.activePlanWeekIndex = 0;
-  state.activeShoppingWeekIndex = 0;
-  state.currentResults = state.currentMealPlan.flatMap((day) => day.meals.map((meal) => meal.recipe));
-  if (refs.recommendationPreview) {
-    refs.recommendationPreview.innerHTML = "";
-  }
-
-  renderWeeklySlider(state.currentMealPlan);
-  attachPlanRecipeActions();
-  renderShoppingList();
-  } catch (error) {
-    renderRecommendationFallbackCards(error);
-    throw error;
-  }
-}
-
 function renderRecommendationCards(cards, label = "Recommendation") {
-  const allCards = uniqueRecipesByName(cards);
+  const allCards = withUniqueDisplayImages(uniqueRecipesByName(cards), 89);
   state.currentRecommendationCards = allCards;
   const visibleLimit = Math.max(12, Number(state.recommendationCardLimit) || 12);
   const safeCards = allCards.slice(0, visibleLimit);
@@ -3149,23 +2892,6 @@ async function handlePaymentSubmit(event) {
   } finally {
     refs.paymentSubmit.disabled = false;
   }
-}
-
-function renderUnsubscribedPage() {
-  const user = state.currentUser || {};
-  refs.genericScreen.innerHTML = `
-    <section class="page-shell subscription-ended-page">
-      <button type="button" class="ghost back-btn" data-back>Back</button>
-      <div class="brand-lockup"><span class="brand-mark"></span><span>PantryPal</span></div>
-      <h1>Your account has been unsubscribed</h1>
-      <p>Your subscription has been cancelled. You can still search recipes and use free account recommendations, but 7-day planning and shopping lists are paused.</p>
-      <div class="account-status-card">
-        <span>Current status</span>
-        <strong>${escapeHtml(user.subscriptionStatus || "free")}</strong>
-      </div>
-      <button type="button" class="btn primary" data-screen="pricing">Renew Subscription</button>
-      <button type="button" class="btn ghost" data-screen="overview">Back to Overview</button>
-    </section>`;
 }
 
 function renderUnsubscribedPage() {
