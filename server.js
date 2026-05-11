@@ -1295,8 +1295,10 @@ app.post("/api/auth/request-password-reset", async (req, res) => {
     });
     const resetUrl = getPasswordResetUrl(req, resetToken);
 
-    const resetNotice = await sendPasswordResetNotice(updatedUser, resetUrl);
     const firebaseReset = await sendFirebasePasswordResetEmail(updatedUser);
+    const resetNotice = firebaseReset.sent
+      ? { sent: false, reason: "skipped-because-firebase-sent" }
+      : await sendPasswordResetNotice(updatedUser, resetUrl);
     const notificationEmailSent = Boolean(resetNotice.sent || firebaseReset.sent);
 
     if (!notificationEmailSent) {
@@ -1523,8 +1525,10 @@ app.post("/api/auth/signup", async (req, res) => {
     });
 
     const firebaseBootstrap = await bootstrapFirebaseAccount(createdUser);
-    const signupNotice = await sendSignupNotification(createdUser);
     const firebaseVerification = await sendFirebaseEmailVerification(createdUser);
+    const signupNotice = firebaseVerification.sent
+      ? { sent: false, reason: "skipped-because-firebase-verification-sent" }
+      : await sendSignupNotification(createdUser);
     const notificationEmailSent = Boolean(signupNotice.sent || firebaseVerification.sent);
     res.status(201).json({
       user: signupNotice.user || createdUser,
