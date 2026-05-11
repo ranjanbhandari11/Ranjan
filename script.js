@@ -1230,28 +1230,83 @@ async function fetchMealDbCategoryPool(category, count = 12, match = 84) {
   }
 }
 
+async function fetchMealDbAreaPool(area, count = 10, match = 83) {
+  try {
+    const data = await fetchJson(`${THEMEALDB_BASE}/filter.php?a=${encodeURIComponent(area)}`);
+    const meals = uniqueRecipesByName(
+      (data.meals || [])
+        .map((meal, index) => ({ ...normalizeMealDbMeal(meal, match + (index % 10)), area }))
+        .filter((meal) => meal?.id)
+    );
+    return enrichMealDbRecipes(varyRecipes(meals, area.length + count).slice(0, count), count);
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function fetchMealDbSearchPool(term, count = 8, match = 84) {
+  try {
+    const data = await fetchJson(`${THEMEALDB_BASE}/search.php?s=${encodeURIComponent(term)}`);
+    const meals = uniqueRecipesByName(
+      (data.meals || [])
+        .map((meal, index) => normalizeMealDbMeal(meal, match + (index % 9)))
+        .filter((meal) => meal?.id)
+    );
+    return enrichMealDbRecipes(varyRecipes(meals, term.length + count).slice(0, count), count);
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function fetchBroadRecommendationPool(count = 36) {
+  const categoryNames = ["Breakfast", "Starter", "Seafood", "Chicken", "Vegetarian", "Dessert", "Pasta"];
+  const areaNames = ["Italian", "Mexican", "Indian", "Chinese", "Japanese", "Thai", "American", "British", "Canadian", "French"];
+  const searchTerms = ["egg", "salad", "soup", "rice", "noodle", "curry", "pasta", "chicken", "fish", "vegetable"];
+  const perBucket = Math.max(4, Math.ceil(count / 10));
+
+  const [categories, areas, searches, random] = await Promise.all([
+    Promise.all(categoryNames.map((category) => fetchMealDbCategoryPool(category, perBucket, 82).catch(() => []))),
+    Promise.all(areaNames.map((area) => fetchMealDbAreaPool(area, perBucket, 81).catch(() => []))),
+    Promise.all(searchTerms.map((term) => fetchMealDbSearchPool(term, Math.max(3, Math.floor(perBucket / 2)), 80).catch(() => []))),
+    fetchRecipeVarietyPool(Math.max(12, Math.floor(count / 2))).catch(() => [])
+  ]);
+
+  return uniqueRecipesByName([
+    ...categories.flat(),
+    ...areas.flat(),
+    ...searches.flat(),
+    ...random,
+    ...mealSlotFallbackRecipes,
+    ...recipePool
+  ]);
+}
+
 async function fetchTypedMealPlanPool(totalDays = 7, seeds = []) {
-  const perType = totalDays >= 30 ? 18 : 10;
-  const [breakfast, starter, dessert, seafood, chicken, beef, pasta, random] = await Promise.all([
+  const perType = totalDays >= 30 ? 24 : 14;
+  const [breakfast, starter, dessert, seafood, chicken, beef, vegetarian, side, pasta, broad] = await Promise.all([
     fetchMealDbCategoryPool("Breakfast", perType, 88),
     fetchMealDbCategoryPool("Starter", perType, 84),
     fetchMealDbCategoryPool("Dessert", perType, 82),
     fetchMealDbCategoryPool("Seafood", perType, 86),
     fetchMealDbCategoryPool("Chicken", perType, 86),
-    fetchMealDbCategoryPool("Beef", Math.max(8, Math.round(perType / 2)), 84),
+    fetchMealDbCategoryPool("Beef", Math.max(10, Math.round(perType / 2)), 84),
+    fetchMealDbCategoryPool("Vegetarian", Math.max(10, Math.round(perType / 2)), 84),
+    fetchMealDbCategoryPool("Side", Math.max(8, Math.round(perType / 2)), 82),
     fetchFavoriteIngredientPool(seeds.length ? seeds : ["pasta", "rice", "tomato"], 8).catch(() => []),
-    fetchRecipeVarietyPool(totalDays >= 30 ? 30 : 16).catch(() => [])
+    fetchBroadRecommendationPool(totalDays >= 30 ? 90 : 42).catch(() => [])
   ]);
 
   return uniqueRecipesByName([
     ...breakfast.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "breakfast"] })),
     ...starter.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "light"] })),
     ...dessert.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "light", "dessert"] })),
+    ...side.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "light"] })),
     ...seafood.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
     ...chicken.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
     ...beef.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
+    ...vegetarian.map((recipe) => ({ ...recipe, mealTags: [...(recipe.mealTags || []), "main"] })),
     ...pasta,
-    ...random
+    ...broad
   ]);
 }
 
@@ -2402,13 +2457,15 @@ async function renderRecommendations() {
       renderRecommendationCards(variedGuestFallback, "Guest recommendation");
 
       try {
-        const [favouriteMatches, generalMatches] = await Promise.all([
+        const [favouriteMatches, generalMatches, cuisineMatches] = await Promise.all([
           guestSeeds.length ? fetchFavoriteIngredientPool(guestSeeds, 8).catch(() => []) : Promise.resolve([]),
-          fetchGuestRecommendations(30).catch(() => [])
+          fetchGuestRecommendations(36).catch(() => []),
+          fetchBroadRecommendationPool(48).catch(() => [])
         ]);
         const guestResults = uniqueRecipesByName([
           ...favouriteMatches,
           ...generalMatches,
+          ...cuisineMatches,
           ...variedGuestFallback
         ]);
         renderRecommendationCards(varyRecipes(guestResults, 117), "Guest recommendation");
@@ -2459,16 +2516,18 @@ async function renderRecommendations() {
       renderShoppingList();
 
       try {
-        const [favouriteMatches, typedMealMatches, varietyMatches] = await Promise.all([
+        const [favouriteMatches, typedMealMatches, varietyMatches, broadMatches] = await Promise.all([
           fetchFavoriteIngredientPool(seeds, 16).catch(() => []),
           fetchTypedMealPlanPool(planningDayCount, seeds).catch(() => []),
-          fetchRecipeVarietyPool(planningDayCount >= 30 ? 40 : 20).catch(() => [])
+          fetchRecipeVarietyPool(planningDayCount >= 30 ? 70 : 28).catch(() => []),
+          fetchBroadRecommendationPool(planningDayCount >= 30 ? 110 : 50).catch(() => [])
         ]);
         planPool = uniqueRecipesByName([
           ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 94) })),
           ...favouriteMatches,
           ...typedMealMatches,
           ...varietyMatches,
+          ...broadMatches,
           ...planPool
         ]);
         planPool = varyRecipes(planPool, planningDayCount + 47);
@@ -2506,14 +2565,16 @@ async function renderRecommendations() {
     renderRecommendationCards(variedFallbackCards, "Personalised");
 
     try {
-      const [freshByFavorites, variety] = await Promise.all([
+      const [freshByFavorites, variety, cuisineMatches] = await Promise.all([
         fetchFavoriteIngredientPool(seeds, 10).catch(() => []),
-        fetchRecipeVarietyPool(24).catch(() => [])
+        fetchRecipeVarietyPool(36).catch(() => []),
+        fetchBroadRecommendationPool(54).catch(() => [])
       ]);
       const liveCards = uniqueRecipesByName([
         ...savedRecipes.map((recipe) => ({ ...recipe, match: Math.max(recipe.match || 88, 93) })),
         ...freshByFavorites,
         ...variety,
+        ...cuisineMatches,
         ...variedFallbackCards
       ]);
       renderRecommendationCards(varyRecipes(liveCards, 223), "Personalised");
