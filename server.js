@@ -579,31 +579,36 @@ function getStripePeriodEnd(subscriptionData, fallbackPlanName = "") {
 
 async function notifySubscriptionStarted(user) {
   if (!user?.email || !user?.subscription?.plan) {
-    return;
+    return { sent: false, reason: "missing-user-or-plan" };
   }
 
   if (user.subscription?.confirmationEmailSentAt) {
-    return;
+    return { sent: false, reason: "confirmation-already-sent" };
   }
 
   const daysLeft = user.subscription?.endsAt
     ? getCalendarDaysLeft(user.subscription.endsAt)
     : getPlanDurationDays(user.subscription.plan);
 
-  await sendEmail({
+  const delivery = await sendEmailDetailed({
     to: user.email,
     subject: `PantryPal subscription confirmed: ${user.subscription.plan}`,
     text: `Hi ${user.username}, your PantryPal ${user.subscription.plan} is now active. You currently have ${daysLeft} day(s) left in this billing period.`,
     html: `<p>Hi ${user.username},</p><p>Your PantryPal <strong>${user.subscription.plan}</strong> is now active.</p><p>You currently have <strong>${daysLeft} day(s)</strong> left in this billing period.</p>`
   });
 
-  await upsertUser({
+  const updatedUser = await upsertUser({
     ...user,
     subscription: {
       ...normalizeSubscription(user.subscription),
-      confirmationEmailSentAt: new Date().toISOString()
+      confirmationEmailSentAt: delivery.sent ? new Date().toISOString() : ""
     }
   });
+
+  return {
+    ...delivery,
+    user: updatedUser
+  };
 }
 
 async function runSubscriptionNotifications() {
@@ -1155,8 +1160,38 @@ app.get("/api/email/status", (_req, res) => {
     gmailFallbackConfigured: Boolean(normalizeTerm(SMTP_HOST) === "smtp.gmail.com" && SMTP_USER && SMTP_PASS),
     resendConfigured: Boolean(RESEND_API_KEY && EMAIL_FROM),
     firebaseResetConfigured: Boolean(FIREBASE_PUBLIC_CONFIG.apiKey),
-    fromConfigured: Boolean(EMAIL_FROM)
+    fromConfigured: Boolean(EMAIL_FROM),
+    deliveryPriority: ["smtp", "gmail-fallback", "resend", "firebase"],
+    note: "If all configured values are true but no email arrives, check Gmail App Password, spam folder, Firebase Email/Password provider, and Render outbound mail limits."
   });
+});
+
+app.post("/api/email/test", async (req, res) => {
+  try {
+    const to = String(req.body?.to || "").trim();
+    if (!to) {
+      res.status(400).json({ ok: false, error: "Recipient email is required." });
+      return;
+    }
+
+    const result = await sendEmailDetailed({
+      to,
+      subject: "PantryPal email delivery test",
+      text: "This is a PantryPal delivery test from the deployed backend.",
+      html: "<p>This is a <strong>PantryPal delivery test</strong> from the deployed backend.</p>"
+    });
+
+    res.status(result.sent ? 200 : 502).json({
+      ok: result.sent,
+      sent: result.sent,
+      provider: result.provider || null,
+      messageId: result.messageId || "",
+      reason: result.reason || "",
+      attempts: result.attempts || []
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Email test failed." });
+  }
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -1255,9 +1290,7 @@ app.post("/api/auth/request-password-reset", async (req, res) => {
     const resetUrl = getPasswordResetUrl(req, resetToken);
 
     const resetNotice = await sendPasswordResetNotice(updatedUser, resetUrl);
-    const firebaseReset = resetNotice.sent
-      ? { sent: false, reason: "pantrypal-smtp-sent" }
-      : await sendFirebasePasswordResetEmail(updatedUser);
+    const firebaseReset = await sendFirebasePasswordResetEmail(updatedUser);
     const notificationEmailSent = Boolean(resetNotice.sent || firebaseReset.sent);
 
     if (!notificationEmailSent) {
@@ -1291,10 +1324,28 @@ app.post("/api/auth/request-password-reset", async (req, res) => {
       ok: true,
       email: user.email,
       username: user.username,
-      delivery: firebaseReset.sent ? "firebase" : "pantrypal",
+      delivery: [
+        resetNotice.sent ? `pantrypal-${resetNotice.provider || "email"}` : "",
+        firebaseReset.sent ? "firebase" : ""
+      ].filter(Boolean).join(","),
       resetLinkIssued: true,
       notificationEmailSent,
-      emailDeliveryReason: resetNotice.provider || (firebaseReset.sent ? "firebase" : "sent"),
+      emailDeliveryReason: [
+        resetNotice.sent ? `pantrypal-${resetNotice.provider || "email"}` : (resetNotice.reason ? `pantrypal-email: ${resetNotice.reason}` : ""),
+        firebaseReset.sent ? "firebase" : (firebaseReset.reason ? `firebase: ${firebaseReset.reason}` : "")
+      ].filter(Boolean).join(" | "),
+      emailDeliveryDetails: {
+        pantrypalEmail: {
+          sent: Boolean(resetNotice.sent),
+          provider: resetNotice.provider || null,
+          reason: resetNotice.reason || ""
+        },
+        firebase: {
+          sent: Boolean(firebaseReset.sent),
+          provider: firebaseReset.provider || null,
+          reason: firebaseReset.reason || ""
+        }
+      },
       expiresAt: resetExpiresAt
     });
   } catch (error) {
@@ -1465,11 +1516,9 @@ app.post("/api/auth/signup", async (req, res) => {
       favorites: ["Chicken", "Rice", "Tomato"]
     });
 
-    const signupNotice = await sendSignupNotification(createdUser);
     const firebaseBootstrap = await bootstrapFirebaseAccount(createdUser);
-    const firebaseVerification = signupNotice.sent
-      ? { sent: false, reason: "pantrypal-smtp-sent" }
-      : await sendFirebaseEmailVerification(createdUser);
+    const signupNotice = await sendSignupNotification(createdUser);
+    const firebaseVerification = await sendFirebaseEmailVerification(createdUser);
     const notificationEmailSent = Boolean(signupNotice.sent || firebaseVerification.sent);
     res.status(201).json({
       user: signupNotice.user || createdUser,
@@ -1480,7 +1529,11 @@ app.post("/api/auth/signup", async (req, res) => {
             signupNotice.sent ? `welcome-email-sent-${signupNotice.provider || "email"}` : "",
             firebaseVerification.sent ? "firebase-verification-sent" : ""
           ].filter(Boolean).join(",")
-        : (firebaseVerification.reason || signupNotice.reason || "email-delivery-failed"),
+        : [
+            signupNotice.reason ? `pantrypal-email: ${signupNotice.reason}` : "",
+            firebaseVerification.reason ? `firebase: ${firebaseVerification.reason}` : "",
+            firebaseBootstrap.reason ? `firebase-bootstrap: ${firebaseBootstrap.reason}` : ""
+          ].filter(Boolean).join(" | ") || "email-delivery-failed",
       emailDeliveryDetails: {
         pantrypalEmail: {
           sent: Boolean(signupNotice.sent),
@@ -1726,12 +1779,18 @@ app.get("/api/stripe/session-status", async (req, res) => {
       confirmationEmailSentAt: ""
     });
 
-    await notifySubscriptionStarted(updatedUser);
+    const subscriptionEmail = await notifySubscriptionStarted(updatedUser);
     const refreshedUser = await findUserByEmail(customerEmail);
 
     res.json({
       ok: true,
       user: refreshedUser,
+      subscriptionEmail: {
+        sent: Boolean(subscriptionEmail?.sent),
+        provider: subscriptionEmail?.provider || null,
+        reason: subscriptionEmail?.reason || "",
+        attempts: subscriptionEmail?.attempts || []
+      },
       session: {
         id: session.id,
         payment_status: session.payment_status,
