@@ -848,6 +848,47 @@ function normalisedIngredientList(values) {
   return normalizeIngredientList(values);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function uniqueRecipesByName(recipes = []) {
+  const seen = new Set();
+  return (Array.isArray(recipes) ? recipes : [])
+    .filter(Boolean)
+    .filter((recipe, index) => {
+      const title = String(recipe.title || recipe.name || recipe.strMeal || "").trim();
+      const key = title ? title.toLowerCase() : String(recipe.id || recipe.idMeal || `recipe-${index}`);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function getRecipeMatchScore(recipe, preferences = []) {
+  const preferred = normalizeIngredientList(preferences);
+  const baseMatch = Number(recipe?.match || 0);
+  if (!preferred.length) return Math.max(72, Math.min(98, baseMatch || 84));
+
+  const title = normalizeIngredientKey(recipe?.title || recipe?.name || "");
+  const ingredients = getRecipeIngredientNames(recipe).map((ingredient) => normalizeIngredientKey(ingredient));
+  const hits = preferred.filter((item) => {
+    const key = normalizeIngredientKey(item);
+    return key && (title.includes(key) || ingredients.some((ingredient) => ingredient.includes(key) || key.includes(ingredient)));
+  }).length;
+
+  return Math.max(74, Math.min(99, (baseMatch || 78) + hits * 7));
+}
+
+function getUserFavoriteRecipes(user = state.currentUser) {
+  return Array.isArray(user?.savedRecipes) ? user.savedRecipes : [];
+}
+
 function getCurrentUserEmail() {
   return normalizeTerm(state.currentUser?.email);
 }
